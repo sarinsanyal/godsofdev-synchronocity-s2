@@ -12,20 +12,14 @@ const upload = multer({ storage: multer.memoryStorage() });
 // ==========================================
 router.get('/events', async (req: Request, res: Response) => {
   try {
-    const { lat, lng, radius } = req.query;
-
-    if (!lat || !lng || !radius) {
-      return res.status(400).json({ error: 'Missing lat, lng, or radius parameters' });
-    }
-
-    const { data: events, error } = await supabase.rpc('get_events_within_radius', {
-      user_lat: parseFloat(lat as string),
-      user_lng: parseFloat(lng as string),
-      search_radius_meters: parseInt(radius as string, 10)
-    });
+    // Fetch all events directly from the database without any filtering
+    const { data: events, error } = await supabase
+      .from('events')
+      .select('*');
 
     if (error) throw error;
 
+    // Return the pure data payload
     res.status(200).json(events);
   } catch (error) {
     console.error('Fetch Events Error:', error);
@@ -40,14 +34,25 @@ router.post('/events', upload.single('image'), async (req: Request, res: Respons
   try {
     const userId = req.headers['x-mock-user-id'] as string;
 
-    // CHANGED: Any logged-in user can now create an event
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized: You must be logged in to create an event' });
     }
 
-    const { title, description, category, lat, lng, contact_email, contact_phone } = req.body;
+    // UPDATED: Added summary, address, and tags
+    const { title, description, summary, category, tags, lat, lng, address, contact_email, contact_phone } = req.body;
     const file = req.file;
     let imageUrl = null;
+
+    // Safely parse tags from form-data string into an array
+    let parsedTags = null;
+    if (tags) {
+      try {
+        parsedTags = typeof tags === 'string' ? JSON.parse(tags) : tags;
+      } catch (e) {
+        // Fallback if sent as comma-separated string
+        parsedTags = typeof tags === 'string' ? tags.split(',').map((t: string) => t.trim()) : [];
+      }
+    }
 
     if (file) {
       const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
@@ -72,12 +77,16 @@ router.post('/events', upload.single('image'), async (req: Request, res: Respons
       .insert([{
         title,
         description,
+        summary,         // NEW
         category,
+        tags: parsedTags,// NEW
         organizer_id: userId,
         contact_email,
         contact_phone,
+        address,         // NEW
         image_url: imageUrl,
-        location: `POINT(${lng} ${lat})` 
+        latitude: lat,   
+        longitude: lng   
       }])
       .select()
       .single();
@@ -117,9 +126,20 @@ router.put('/events/:eventId', upload.single('image'), async (req: Request, res:
       return res.status(403).json({ error: 'Forbidden: You can only edit your own events' });
     }
 
-    const { title, description, category, lat, lng, contact_email, contact_phone } = req.body;
+    // UPDATED: Added summary, address, and tags
+    const { title, description, summary, category, tags, lat, lng, address, contact_email, contact_phone } = req.body;
     const file = req.file;
-    let imageUrl = event.image_url; // Default to existing image
+    let imageUrl = event.image_url; 
+
+    // Safely parse tags
+    let parsedTags = null;
+    if (tags) {
+      try {
+        parsedTags = typeof tags === 'string' ? JSON.parse(tags) : tags;
+      } catch (e) {
+        parsedTags = typeof tags === 'string' ? tags.split(',').map((t: string) => t.trim()) : [];
+      }
+    }
 
     // 3. Process new image if uploaded
     if (file) {
@@ -140,12 +160,23 @@ router.put('/events/:eventId', upload.single('image'), async (req: Request, res:
       imageUrl = publicUrlData.publicUrl;
     }
 
-    // Prepare update payload. Only update location if lat/lng are provided
+    // Prepare update payload with new fields
     const updatePayload: any = {
-      title, description, category, contact_email, contact_phone, image_url: imageUrl
+      title, 
+      description, 
+      summary,           // NEW
+      category, 
+      tags: parsedTags,  // NEW
+      contact_email, 
+      contact_phone, 
+      address,           // NEW
+      image_url: imageUrl
     };
+    
+    // Pass directly to preserve exact numeric precision
     if (lat && lng) {
-      updatePayload.location = `POINT(${lng} ${lat})`;
+      updatePayload.latitude = lat;
+      updatePayload.longitude = lng;
     }
 
     // 4. Update the database
