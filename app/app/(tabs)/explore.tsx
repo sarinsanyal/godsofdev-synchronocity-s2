@@ -1,27 +1,50 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { StyleSheet, View, Text, Dimensions, TouchableOpacity, Image, ActivityIndicator, TextInput, Keyboard, FlatList } from 'react-native';
+import { StyleSheet, View, Text, Dimensions, TouchableOpacity, Image, ActivityIndicator, TextInput, Keyboard, FlatList, Alert } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
-import { MOCK_EVENTS, DatabaseEvent } from '../../constants/mockData';
-import { useAppTheme } from '../_layout'; // <-- Wire up our global layout theme controller
+import { useAppTheme } from '../_layout';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
+// IP configuration mapping back to host server machine
+const BASE_URL = 'http://10.234.101.16:3000'; // Change to local IP if testing on physical hardware
+const MOCK_USER_ID = 'user-123'; // Matches example mock header
+
+// Matches the direct Event Record Shape returned by your backend
+interface DatabaseEvent {
+  id: string;
+  title: string;
+  description: string;
+  summary: string;
+  category: string;
+  tags?: string[];
+  organizer_id: string;
+  contact_email: string;
+  contact_phone: string;
+  address: string;
+  image_url: string;
+  latitude: number; // Decoupled directly
+  longitude: number; // Decoupled directly
+  created_at: string;
+  updated_at: string;
+}
+
 export default function ExploreScreen() {
-  // 1. Consume the master theme tokens
   const { theme, colors } = useAppTheme();
   const isDark = theme === 'dark';
 
   const mapRef = useRef<MapView | null>(null);
-  const [location, setLocation] = useState<Location.LocationObject | null>(null);
+  const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [events, setEvents] = useState<DatabaseEvent[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isSearchFocused, setIsSearchFocused] = useState<boolean>(false);
   const [selectedEvent, setSelectedEvent] = useState<DatabaseEvent | null>(null);
 
-  // ❤️ State Engines for Interaction Tracking
+  // Interaction States
   const [likedEvents, setLikedEvents] = useState<string[]>([]);
   const [dislikedEvents, setDislikedEvents] = useState<string[]>([]);
 
@@ -29,26 +52,55 @@ export default function ExploreScreen() {
   const STREET_LNG_DELTA = 0.06;
 
   const DEFAULT_FALLBACK = {
-    latitude: 22.5726,
+    latitude: 22.5726, // Matches your documentation's default Kolkata coordinates
     longitude: 88.3639,
     latitudeDelta: STREET_LAT_DELTA,
     longitudeDelta: STREET_LNG_DELTA,
   };
 
+  // 1. Initial Location Query
   useEffect(() => {
     (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setLoading(false);
-        return;
+      try {
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          fetchAllEvents();
+          return;
+        }
+        let currentLoc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        setUserLocation(currentLoc);
+        fetchAllEvents();
+      } catch (error) {
+        console.error("Error setting up starting position:", error);
+        fetchAllEvents();
       }
-      let currentLoc = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-      setLocation(currentLoc);
-      setLoading(false);
     })();
   }, []);
+
+  // 2. Fetch Events - Updated to remove invalid query parameters
+  const fetchAllEvents = async () => {
+    try {
+      setRefreshing(true);
+      const url = `${BASE_URL}/api/events`; // Clean path matching documentation
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        const errBody = await response.text();
+        throw new Error(`Server returned status ${response.status}: ${errBody}`);
+      }
+      
+      const data = await response.json();
+      setEvents(data);
+    } catch (err) {
+      console.error("API Fetch Failure:", err);
+      Alert.alert("Sync Issue", "Could not reach the server. Double check if backend is running.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
   const getCategoryTheme = (category: string) => {
     switch (category) {
@@ -61,20 +113,20 @@ export default function ExploreScreen() {
     }
   };
 
+  // Safe internal searching mechanism
   const filteredEvents = useMemo(() => {
-    if (!searchQuery.trim()) return MOCK_EVENTS;
-    return MOCK_EVENTS.filter(event => 
-      event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      event.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      event.location.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      event.summary.toLowerCase().includes(searchQuery.toLowerCase())
+    if (!searchQuery.trim()) return events;
+    return events.filter(event => 
+      event.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      event.category?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      event.description?.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [searchQuery]);
+  }, [searchQuery, events]);
 
-  const panToCoordinates = (latitude: number, longitude: number, isEventOffset = false) => {
+  const panToCoordinates = (lat: number, lng: number, isEventOffset = false) => {
     mapRef.current?.animateToRegion({
-      latitude: isEventOffset ? latitude - 0.001 : latitude,
-      longitude,
+      latitude: isEventOffset ? lat - 0.001 : lat,
+      longitude: lng,
       latitudeDelta: STREET_LAT_DELTA,
       longitudeDelta: STREET_LNG_DELTA,
     }, 800);
@@ -83,10 +135,13 @@ export default function ExploreScreen() {
   const snapToCurrentLocation = async () => {
     try {
       let currentLoc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      setLocation(currentLoc);
+      setUserLocation(currentLoc);
       panToCoordinates(currentLoc.coords.latitude, currentLoc.coords.longitude);
+      fetchAllEvents();
     } catch {
-      if (location) panToCoordinates(location.coords.latitude, location.coords.longitude);
+      if (userLocation) {
+        panToCoordinates(userLocation.coords.latitude, userLocation.coords.longitude);
+      }
     }
   };
 
@@ -95,7 +150,10 @@ export default function ExploreScreen() {
     Keyboard.dismiss();
     setIsSearchFocused(false);
     setSelectedEvent(event);
-    panToCoordinates(event.location.latitude, event.location.longitude, true);
+    
+    if (event.latitude && event.longitude) {
+      panToCoordinates(event.latitude, event.longitude, true);
+    }
   };
 
   const handleSearchSubmit = () => {
@@ -107,10 +165,33 @@ export default function ExploreScreen() {
     }
   };
 
-  const toggleLikeEvent = (id: string) => {
+  // 3. Like/RSVP handler using updated POST /api/rsvp spec
+  const toggleLikeEvent = async (id: string) => {
+    const isAlreadyLiked = likedEvents.includes(id);
     setLikedEvents(prev => 
       prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
     );
+
+    if (!isAlreadyLiked) {
+      try {
+        const response = await fetch(`${BASE_URL}/api/rsvp`, { //
+          method: 'POST', //
+          headers: {
+            'Content-Type': 'application/json', //
+            'x-mock-user-id': MOCK_USER_ID //
+          },
+          body: JSON.stringify({ eventId: id }) //
+        });
+        
+        if (!response.ok) {
+          throw new Error('RSVP request failed');
+        }
+        
+        console.log("RSVP confirmed with database successfully.");
+      } catch (err) {
+        console.error("Network RSVP error:", err);
+      }
+    }
   };
 
   const toggleDislikeEvent = (id: string) => {
@@ -127,19 +208,18 @@ export default function ExploreScreen() {
     return (
       <View style={[styles.loaderContainer, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color="#eab308" />
-        <Text style={[styles.loaderText, { color: colors.textSecondary }]}>Pinging GPS Coordinates...</Text>
+        <Text style={[styles.loaderText, { color: colors.textSecondary }]}>Loading live event catalog...</Text>
       </View>
     );
   }
 
-  const initialRegion = location ? {
-    latitude: location.coords.latitude,
-    longitude: location.coords.longitude,
+  const initialRegion = userLocation ? {
+    latitude: userLocation.coords.latitude,
+    longitude: userLocation.coords.longitude,
     latitudeDelta: STREET_LAT_DELTA,
     longitudeDelta: STREET_LNG_DELTA,
   } : DEFAULT_FALLBACK;
 
-  // Shared Theme Styles definitions
   const sharedCardStyle = { backgroundColor: colors.cardBg, borderColor: colors.cardBorder };
 
   return (
@@ -151,7 +231,7 @@ export default function ExploreScreen() {
         initialRegion={initialRegion}
         showsUserLocation={true}
         showsMyLocationButton={false}
-        userInterfaceStyle={theme} // <-- Native Apple/Google map elements adapt to theme!
+        userInterfaceStyle={theme}
         onPress={() => {
           setSelectedEvent(null);
           setIsSearchFocused(false);
@@ -162,14 +242,17 @@ export default function ExploreScreen() {
           const catTheme = getCategoryTheme(event.category);
           const isActive = selectedEvent?.id === event.id;
           const isDisliked = dislikedEvents.includes(event.id);
+          
+          // Safety baseline fallbacks if fields are missing
+          const lat = event.latitude; //
+          const lng = event.longitude; //
+
+          if (!lat || !lng) return null;
 
           return (
             <Marker
               key={event.id}
-              coordinate={{
-                latitude: event.location.latitude,
-                longitude: event.location.longitude,
-              }}
+              coordinate={{ latitude: lat, longitude: lng }}
               onPress={(e) => {
                 e.stopPropagation();
                 handleSelectEvent(event);
@@ -188,13 +271,13 @@ export default function ExploreScreen() {
         })}
       </MapView>
 
-      {/* 🔍 FLOATING SEARCH INTERFACE ENGINE */}
+      {/* 🔍 SEARCH CONTAINER */}
       <View style={styles.searchContainer}>
         <View style={[styles.searchBarWrapper, sharedCardStyle]}>
           <Ionicons name="search" size={20} color={colors.textMuted} style={styles.searchIcon} />
           <TextInput
             style={[styles.searchInput, { color: colors.textPrimary }]}
-            placeholder="Search locations, events, types..."
+            placeholder="Search events..."
             placeholderTextColor={colors.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -210,12 +293,12 @@ export default function ExploreScreen() {
           )}
         </View>
 
-        {/* 📋 DYNAMIC SEARCH SUGGESTION DROPDOWN LIST */}
+        {/* 📋 DROPDOWN PANELS */}
         {isSearchFocused && searchQuery.trim().length > 0 && (
           <View style={[styles.dropdownPanel, sharedCardStyle]}>
             {filteredEvents.filter(ev => !dislikedEvents.includes(ev.id)).length === 0 ? (
               <View style={styles.noResultsBox}>
-                <Text style={[styles.noResultsText, { color: colors.textMuted }]}>No events match your criteria</Text>
+                <Text style={[styles.noResultsText, { color: colors.textMuted }]}>No events matched query</Text>
               </View>
             ) : (
               <FlatList
@@ -235,7 +318,7 @@ export default function ExploreScreen() {
                       </View>
                       <View style={styles.listTextContainer}>
                         <Text style={[styles.listTitle, { color: colors.textPrimary }]} numberOfLines={1}>{item.title}</Text>
-                        <Text style={[styles.listSub, { color: colors.textMuted }]} numberOfLines={1}>{item.location.address}</Text>
+                        <Text style={[styles.listSub, { color: colors.textMuted }]} numberOfLines={1}>{item.category}</Text>
                       </View>
                       <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
                     </TouchableOpacity>
@@ -247,7 +330,7 @@ export default function ExploreScreen() {
         )}
       </View>
 
-      {/* 🎯 FLOATING GPS TARGET CONTROL PILL */}
+      {/* 🎯 TARGET TRACKING FLOATER */}
       <TouchableOpacity 
         style={[
           styles.locationButton, 
@@ -257,10 +340,14 @@ export default function ExploreScreen() {
         onPress={snapToCurrentLocation}
         activeOpacity={0.8}
       >
-        <FontAwesome6 name="location-crosshairs" size={22} color={colors.textPrimary} />
+        {refreshing ? (
+          <ActivityIndicator size="small" color={colors.textPrimary} />
+        ) : (
+          <FontAwesome6 name="location-crosshairs" size={22} color={colors.textPrimary} />
+        )}
       </TouchableOpacity>
 
-      {/* 📋 CENTRALIZED FULL-SCREEN MODAL EVENT DISPLAY */}
+      {/* 📋 DETAILED MODAL HERO CARD */}
       {selectedEvent && (() => {
         const catTheme = getCategoryTheme(selectedEvent.category);
         const isLiked = likedEvents.includes(selectedEvent.id);
@@ -281,19 +368,21 @@ export default function ExploreScreen() {
               <View style={styles.heroCardContent}>
                 <View style={[styles.tagContainer, { backgroundColor: catTheme.bg, borderColor: catTheme.color }]}>
                   <Text style={[styles.categoryBadgeText, { color: catTheme.text }]}>
-                    ⚡ {selectedEvent.category.toUpperCase()}
+                    ⚡ {selectedEvent.category?.toUpperCase() || 'EVENT'}
                   </Text>
                 </View>
 
                 <Text style={[styles.heroCardTitle, { color: colors.textPrimary }]}>{selectedEvent.title}</Text>
-                <Text style={styles.heroCardSummary}>{selectedEvent.summary}</Text>
+                <Text style={styles.heroCardSummary}>{selectedEvent.summary || 'Live Session'}</Text>
                 <Text style={[styles.heroCardDesc, { color: colors.textSecondary }]}>{selectedEvent.description}</Text>
 
                 <View style={[styles.dividerLine, { backgroundColor: colors.cardBorder }]} />
 
                 <View style={styles.metaRow}>
-                  <Ionicons name="navigate-circle" size={18} color={catTheme.color} />
-                  <Text style={[styles.metaText, { color: colors.textSecondary }]} numberOfLines={2}>{selectedEvent.location.address}</Text>
+                  <Ionicons name="location" size={16} color={catTheme.color} />
+                  <Text style={[styles.metaText, { color: colors.textSecondary }]} numberOfLines={2}>
+                    {selectedEvent.address || `${selectedEvent.latitude}, ${selectedEvent.longitude}`}
+                  </Text>
                 </View>
 
                 <View style={[styles.metaRow, { marginTop: 8, marginBottom: 4 }]}>
@@ -301,7 +390,7 @@ export default function ExploreScreen() {
                   <Text style={[styles.metaText, { color: colors.textSecondary }]} numberOfLines={1}>{selectedEvent.contact_email}</Text>
                 </View>
 
-                {/* ⚡ SWIPE-INSPIRED LIKE & DISLIKE INTERACTION CONTROL ROW */}
+                {/* INTERACTIONS BAR */}
                 <View style={styles.actionButtonRow}>
                   <TouchableOpacity
                     style={[styles.actionButton, styles.dislikeButton, isDark && { backgroundColor: '#451a1a', borderColor: '#7f1d1d' }]}
@@ -328,7 +417,7 @@ export default function ExploreScreen() {
                       color={isLiked ? "#ffffff" : "#22c55e"} 
                     />
                     <Text style={[styles.actionButtonText, { color: isLiked ? '#ffffff' : '#22c55e' }]}>
-                      {isLiked ? 'Liked' : 'Like'}
+                      {isLiked ? "RSVP'd" : 'Like'}
                     </Text>
                   </TouchableOpacity>
                 </View>
