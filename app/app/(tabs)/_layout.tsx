@@ -1,18 +1,19 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { View, StyleSheet, Platform, Text } from 'react-native';
+import { View, StyleSheet, Platform } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { HapticTab } from '@/components/haptic-tab';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useAppTheme } from '../_layout'; // <-- Pull directly from your master layout file
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  // Pull the current responsive theme states globally
+  const { theme, colors } = useAppTheme();
+  const isDark = theme === 'dark';
 
-  // Aesthetic Colors
+  // Map your design tokens perfectly onto the master context
   const activeColor = '#eab308'; // Ochre Yellow
   const inactiveColor = isDark ? '#71717a' : '#a1a1aa';
-  const bgColor = isDark ? '#09090b' : '#ffffff';
+  const bgColor = colors.background; // Dynamically feeds #09090b or #ffffff
 
   return (
     <Tabs
@@ -68,8 +69,8 @@ export default function TabLayout() {
               <View style={[
                 styles.exploreCircle, 
                 { 
-                  backgroundColor: focused ? '#eab308' : '#18181b',
-                  borderColor: isDark ? '#09090b' : '#ffffff' // Cutout background adapts dynamically to dark mode
+                  backgroundColor: focused ? '#eab308' : (isDark ? '#18181b' : '#18181b'),
+                  borderColor: bgColor // Cutout ring now scales seamlessly into the layout space
                 }
               ]}>
                 <Feather 

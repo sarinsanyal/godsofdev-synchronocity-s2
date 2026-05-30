@@ -3,6 +3,7 @@ import { StyleSheet, View, Text, Dimensions, Image, TouchableOpacity, ScrollView
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MapView, { Region } from 'react-native-maps';
 import { MOCK_EVENTS } from '../../constants/mockData';
+import { useAppTheme } from '../_layout'; // <-- Wire up our global layout theme controller
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -18,7 +19,6 @@ const USER_PROFILE = {
   }
 };
 
-// Simulated interaction metrics mapped from user_interactions database tables
 const MOCK_OWN_EVENTS_METRICS = [
   { id: 'own-1', title: 'Campus Tech Carnival', category: 'Tech', image_url: 'https://images.unsplash.com/photo-1511578314322-379afb476865?w=500', rsvps: 42, saves: 89, removes: 3, address: 'Main Auditorium Ground' },
   { id: 'own-2', title: 'BGMI LAN Showdown', category: 'Gaming', image_url: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=500', rsvps: 124, saves: 210, removes: 14, address: 'Student Activity Center' },
@@ -33,6 +33,10 @@ const INITIAL_REGION: Region = {
 };
 
 export default function ProfileScreen() {
+  // 1. Consume the master theme tokens
+  const { theme, colors } = useAppTheme();
+  const isDark = theme === 'dark';
+
   const [menuVisible, setMenuVisible] = useState(false);
   const [organizeModalVisible, setOrganizeModalVisible] = useState(false);
   const [selectedOwnEvent, setSelectedOwnEvent] = useState<typeof MOCK_OWN_EVENTS_METRICS[0] | null>(null);
@@ -79,16 +83,20 @@ export default function ProfileScreen() {
     setOrganizeModalVisible(false);
   };
 
+  // Sharable theme styling matrices
+  const dynamicCardStyle = { backgroundColor: colors.cardBg, borderColor: colors.cardBorder };
+  const inputThemeStyle = { backgroundColor: isDark ? '#18181b' : '#fafafa', borderColor: colors.cardBorder, color: colors.textPrimary };
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       
       {/* 📋 BRANDED FESTIVAL HEADER TOP BAR CONTAINER */}
-      <View style={styles.headerBar}>
+      <View style={[styles.headerBar, { backgroundColor: colors.background, borderBottomColor: colors.cardBorder }]}>
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>Your Profile</Text>
+          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Your Profile</Text>
         </View>
         <TouchableOpacity style={styles.hamburgerButton} onPress={() => setMenuVisible(true)} activeOpacity={0.7}>
-          <Ionicons name="menu" size={26} color="#18181b" />
+          <Ionicons name="menu" size={26} color={colors.textPrimary} />
         </TouchableOpacity>
       </View>
 
@@ -96,51 +104,51 @@ export default function ProfileScreen() {
         
         {/* CENTRAL PROFILE HERO */}
         <View style={styles.profileHeroSection}>
-          <View style={styles.avatarOutlineRing}>
+          <View style={[styles.avatarOutlineRing, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
             <Image source={{ uri: USER_PROFILE.avatar_url }} style={styles.avatarImage} />
           </View>
-          <Text style={styles.profileName}>{USER_PROFILE.name}</Text>
+          <Text style={[styles.profileName, { color: colors.textPrimary }]}>{USER_PROFILE.name}</Text>
           <Text style={styles.profileUsername}>{USER_PROFILE.username}</Text>
-          <Text style={styles.profileBio}>{USER_PROFILE.bio}</Text>
+          <Text style={[styles.profileBio, { color: colors.textSecondary }]}>{USER_PROFILE.bio}</Text>
         </View>
 
         {/* METRIC NUMERICAL GRID ROW */}
-        <View style={styles.statsCardContainer}>
+        <View style={[styles.statsCardContainer, dynamicCardStyle]}>
           <View style={styles.statSegment}>
-            <Text style={styles.statValue}>{USER_PROFILE.stats.hosted}</Text>
-            <Text style={styles.statLabel}>Hosted</Text>
+            <Text style={[styles.statValue, { color: colors.textPrimary }]}>{USER_PROFILE.stats.hosted}</Text>
+            <Text style={[styles.statLabel, { color: colors.textMuted }]}>Hosted</Text>
           </View>
-          <View style={styles.statDivider} />
+          <View style={[styles.statDivider, { backgroundColor: colors.cardBorder }]} />
           <View style={styles.statSegment}>
-            <Text style={styles.statValue}>{USER_PROFILE.stats.attended}</Text>
-            <Text style={styles.statLabel}>Attended</Text>
+            <Text style={[styles.statValue, { color: colors.textPrimary }]}>{USER_PROFILE.stats.attended}</Text>
+            <Text style={[styles.statLabel, { color: colors.textMuted }]}>Attended</Text>
           </View>
-          <View style={styles.statDivider} />
+          <View style={[styles.statDivider, { backgroundColor: colors.cardBorder }]} />
           <View style={styles.statSegment}>
-            <Text style={styles.statValue}>{USER_PROFILE.stats.saved}</Text>
-            <Text style={styles.statLabel}>Saved</Text>
+            <Text style={[styles.statValue, { color: colors.textPrimary }]}>{USER_PROFILE.stats.saved}</Text>
+            <Text style={[styles.statLabel, { color: colors.textMuted }]}>Saved</Text>
           </View>
         </View>
 
         {/* 🪄 PROMINENT "ORGANIZE YOUR EVENT" ACTION BANNER */}
-        <TouchableOpacity style={styles.organizeBannerButton} activeOpacity={0.9} onPress={() => setOrganizeModalVisible(true)}>
+        <TouchableOpacity style={[styles.organizeBannerButton, { backgroundColor: isDark ? '#18181b' : '#fafafa', borderColor: colors.cardBorder }]} activeOpacity={0.9} onPress={() => setOrganizeModalVisible(true)}>
           <View style={styles.bannerLeftInfo}>
-            <View style={styles.bannerIconBox}>
+            <View style={[styles.bannerIconBox, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
               <Ionicons name="flash" size={20} color="#eab308" />
             </View>
             <View>
-              <Text style={styles.bannerMainText}>Gather the Community</Text>
-              <Text style={styles.bannerSubText}>Organize your own live custom event</Text>
+              <Text style={[styles.bannerMainText, { color: colors.textPrimary }]}>Gather the Community</Text>
+              <Text style={[styles.bannerSubText, { color: colors.textMuted }]}>Organize your own live custom event</Text>
             </View>
           </View>
-          <Ionicons name="arrow-forward-circle" size={28} color="#18181b" />
+          <Ionicons name="arrow-forward-circle" size={28} color={colors.textPrimary} />
         </TouchableOpacity>
 
         {/* ⚡ YOUR EVENTS (HOSTED MANAGEMENT CAROUSEL) */}
         <View style={styles.sectionSectionWrapper}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionHeadingText}>Your Events</Text>
-            <Text style={styles.viewAllTextLink}>Tap for Engagement Insights</Text>
+            <Text style={[styles.sectionHeadingText, { color: colors.textPrimary }]}>Your Events</Text>
+            <Text style={[styles.viewAllTextLink, { color: colors.textMuted }]}>Tap for Engagement Insights</Text>
           </View>
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.likedHorizontalScroll}>
@@ -149,14 +157,14 @@ export default function ProfileScreen() {
               return (
                 <TouchableOpacity 
                   key={event.id} 
-                  style={styles.eventMiniCard}
+                  style={[styles.eventMiniCard, dynamicCardStyle]}
                   activeOpacity={0.85}
                   onPress={() => setSelectedOwnEvent(event)}
                 >
                   <Image source={{ uri: event.image_url }} style={styles.eventMiniCardImage} />
                   <View style={[styles.miniCategoryIndicator, { backgroundColor: themeColor }]} />
                   <View style={styles.miniCardTextContent}>
-                    <Text style={styles.miniEventTitle} numberOfLines={1}>{event.title}</Text>
+                    <Text style={[styles.miniEventTitle, { color: colors.textPrimary }]} numberOfLines={1}>{event.title}</Text>
                     <View style={styles.miniLocationRow}>
                       <Ionicons name="people" size={12} color="#8b5cf6" />
                       <Text style={styles.insightsSubtext}>{event.rsvps} active RSVPs</Text>
@@ -171,22 +179,22 @@ export default function ProfileScreen() {
         {/* HORIZONTAL LIKED EVENTS LIST */}
         <View style={styles.sectionSectionWrapper}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionHeadingText}>Liked Events</Text>
-            <TouchableOpacity><Text style={styles.viewAllTextLink}>See All</Text></TouchableOpacity>
+            <Text style={[styles.sectionHeadingText, { color: colors.textPrimary }]}>Liked Events</Text>
+            <TouchableOpacity><Text style={[styles.viewAllTextLink, { color: colors.textMuted }]}>See All</Text></TouchableOpacity>
           </View>
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.likedHorizontalScroll}>
             {likedEventsSample.map((event) => {
               const themeColor = getCategoryColor(event.category);
               return (
-                <View key={event.id} style={styles.eventMiniCard}>
+                <View key={event.id} style={[styles.eventMiniCard, dynamicCardStyle]}>
                   <Image source={{ uri: event.image_url }} style={styles.eventMiniCardImage} />
                   <View style={[styles.miniCategoryIndicator, { backgroundColor: themeColor }]} />
                   <View style={styles.miniCardTextContent}>
-                    <Text style={styles.miniEventTitle} numberOfLines={1}>{event.title}</Text>
+                    <Text style={[styles.miniEventTitle, { color: colors.textPrimary }]} numberOfLines={1}>{event.title}</Text>
                     <View style={styles.miniLocationRow}>
-                      <Ionicons name="location" size={12} color="#71717a" />
-                      <Text style={styles.miniLocationText} numberOfLines={1}>{event.location.address}</Text>
+                      <Ionicons name="location" size={12} color={colors.textMuted} />
+                      <Text style={[styles.miniLocationText, { color: colors.textMuted }]} numberOfLines={1}>{event.location.address}</Text>
                     </View>
                   </View>
                 </View>
@@ -200,35 +208,35 @@ export default function ProfileScreen() {
       {/* 📊 INTERACTION ANALYTICS SHEET MODAL */}
       <Modal visible={!!selectedOwnEvent} transparent={true} animationType="fade" onRequestClose={() => setSelectedOwnEvent(null)}>
         <TouchableOpacity style={styles.bottomSheetBackdrop} activeOpacity={1} onPress={() => setSelectedOwnEvent(null)}>
-          <View style={styles.analyticsSheetContainer}>
-            <View style={styles.sheetHeaderIndicator} />
+          <View style={[styles.analyticsSheetContainer, { backgroundColor: colors.cardBg }]}>
+            <View style={[styles.sheetHeaderIndicator, { backgroundColor: colors.cardBorder }]} />
             {selectedOwnEvent && (
               <View>
                 <Text style={styles.sheetSubheading}>EVENT INSIGHTS</Text>
-                <Text style={styles.sheetTitleText}>{selectedOwnEvent.title}</Text>
+                <Text style={[styles.sheetTitleText, { color: colors.textPrimary }]}>{selectedOwnEvent.title}</Text>
                 
                 <View style={styles.analyticsStatsGrid}>
-                  <View style={[styles.analyticCard, { borderColor: '#10b981' }]}>
+                  <View style={[styles.analyticCard, { borderColor: '#10b981', backgroundColor: isDark ? '#27272a' : '#fafafa' }]}>
                     <Ionicons name="checkmark-circle-outline" size={22} color="#10b981" />
-                    <Text style={styles.analyticValue}>{selectedOwnEvent.rsvps}</Text>
-                    <Text style={styles.analyticLabel}>Going (RSVP)</Text>
+                    <Text style={[styles.analyticValue, { color: colors.textPrimary }]}>{selectedOwnEvent.rsvps}</Text>
+                    <Text style={[styles.analyticLabel, { color: colors.textSecondary }]}>Going (RSVP)</Text>
                   </View>
                   
-                  <View style={[styles.analyticCard, { borderColor: '#3b82f6' }]}>
+                  <View style={[styles.analyticCard, { borderColor: '#3b82f6', backgroundColor: isDark ? '#27272a' : '#fafafa' }]}>
                     <Ionicons name="bookmark-outline" size={22} color="#3b82f6" />
-                    <Text style={styles.analyticValue}>{selectedOwnEvent.saves}</Text>
-                    <Text style={styles.analyticLabel}>Interested / Saved</Text>
+                    <Text style={[styles.analyticValue, { color: colors.textPrimary }]}>{selectedOwnEvent.saves}</Text>
+                    <Text style={[styles.analyticLabel, { color: colors.textSecondary }]}>Interested / Saved</Text>
                   </View>
                   
-                  <View style={[styles.analyticCard, { borderColor: '#ef4444' }]}>
+                  <View style={[styles.analyticCard, { borderColor: '#ef4444', backgroundColor: isDark ? '#27272a' : '#fafafa' }]}>
                     <Ionicons name="close-circle-outline" size={22} color="#ef4444" />
-                    <Text style={styles.analyticValue}>{selectedOwnEvent.removes}</Text>
-                    <Text style={styles.analyticLabel}>Removed / Hidden</Text>
+                    <Text style={[styles.analyticValue, { color: colors.textPrimary }]}>{selectedOwnEvent.removes}</Text>
+                    <Text style={[styles.analyticLabel, { color: colors.textSecondary }]}>Removed / Hidden</Text>
                   </View>
                 </View>
 
-                <TouchableOpacity style={styles.closeSheetButton} onPress={() => setSelectedOwnEvent(null)}>
-                  <Text style={styles.closeSheetButtonText}>Dismiss Panel</Text>
+                <TouchableOpacity style={[styles.closeSheetButton, { backgroundColor: colors.textPrimary }]} onPress={() => setSelectedOwnEvent(null)}>
+                  <Text style={[styles.closeSheetButtonText, { color: colors.background }]}>Dismiss Panel</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -239,19 +247,19 @@ export default function ProfileScreen() {
       {/* HAMBURGER SIDE MODAL PANEL */}
       <Modal visible={menuVisible} transparent={true} animationType="fade" onRequestClose={() => setMenuVisible(false)}>
         <TouchableOpacity style={styles.menuOverlayBackground} activeOpacity={1} onPress={() => setMenuVisible(false)}>
-          <View style={styles.hamburgerSidePanel}>
+          <View style={[styles.hamburgerSidePanel, { backgroundColor: colors.cardBg }]}>
             <View style={styles.panelTopHeader}>
-              <Text style={styles.panelHeaderTitle}>Options</Text>
+              <Text style={[styles.panelHeaderTitle, { color: colors.textPrimary }]}>Options</Text>
               <TouchableOpacity onPress={() => setMenuVisible(false)}>
-                <Ionicons name="close" size={24} color="#18181b" />
+                <Ionicons name="close" size={24} color={colors.textPrimary} />
               </TouchableOpacity>
             </View>
-            <View style={styles.panelDivider} />
+            <View style={[styles.panelDivider, { backgroundColor: colors.cardBorder }]} />
             <TouchableOpacity style={styles.panelRowLink} onPress={() => { setMenuVisible(false); Alert.alert('Settings', 'Account interface router.'); }}>
-              <Ionicons name="settings-outline" size={20} color="#4b5563" />
-              <Text style={styles.panelLinkText}>Account Settings</Text>
+              <Ionicons name="settings-outline" size={20} color={colors.textSecondary} />
+              <Text style={[styles.panelLinkText, { color: colors.textSecondary }]}>Account Settings</Text>
             </TouchableOpacity>
-            <View style={[styles.panelDivider, { marginTop: 'auto' }]} />
+            <View style={[styles.panelDivider, { marginTop: 'auto', backgroundColor: colors.cardBorder }]} />
             <TouchableOpacity style={[styles.panelRowLink, styles.logoutActionLink]} onPress={() => { setMenuVisible(false); Alert.alert('Logout', 'Session closing.'); }}>
               <Ionicons name="log-out-outline" size={20} color="#ef4444" />
               <Text style={styles.logoutLinkText}>Log Out</Text>
@@ -263,73 +271,74 @@ export default function ProfileScreen() {
       {/* HOST AN EVENT MODAL */}
       <Modal visible={organizeModalVisible} animationType="slide" transparent={true} onRequestClose={() => setOrganizeModalVisible(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalKeyboardAvoidingContainer}>
-          <View style={styles.organizeModalWindow}>
+          <View style={[styles.organizeModalWindow, { backgroundColor: colors.cardBg }]}>
             <View style={styles.organizeHeader}>
-              <Text style={styles.organizeModalTitle}>Host An Event</Text>
+              <Text style={[styles.organizeModalTitle, { color: colors.textPrimary }]}>Host An Event</Text>
               <TouchableOpacity onPress={() => setOrganizeModalVisible(false)}>
-                <Ionicons name="close-circle" size={28} color="#a1a1aa" />
+                <Ionicons name="close-circle" size={28} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} style={styles.organizeFormScroll} contentContainerStyle={styles.modalFormContentStyle}>
-              <Text style={styles.inputLabelText}>EVENT TITLE</Text>
-              <TextInput style={styles.formInputBox} placeholder="e.g., Rooftop Jazz Mix" placeholderTextColor="#a1a1aa" value={eventTitle} onChangeText={setEventTitle} />
+              <Text style={[styles.inputLabelText, { color: colors.textMuted }]}>EVENT TITLE</Text>
+              <TextInput style={[styles.formInputBox, inputThemeStyle]} placeholder="e.g., Rooftop Jazz Mix" placeholderTextColor={colors.textMuted} value={eventTitle} onChangeText={setEventTitle} />
 
-              <Text style={styles.inputLabelText}>SUMMARY OVERVIEW</Text>
-              <TextInput style={styles.formInputBox} placeholder="Short highlight catchphrase" placeholderTextColor="#a1a1aa" value={eventSummary} onChangeText={setEventSummary} />
+              <Text style={[styles.inputLabelText, { color: colors.textMuted }]}>SUMMARY OVERVIEW</Text>
+              <TextInput style={[styles.formInputBox, inputThemeStyle]} placeholder="Short highlight catchphrase" placeholderTextColor={colors.textMuted} value={eventSummary} onChangeText={setEventSummary} />
 
-              <Text style={styles.inputLabelText}>FULL DESCRIPTION</Text>
-              <TextInput style={[styles.formInputBox, styles.multilineInputBox]} placeholder="Provide detailed breakdowns..." placeholderTextColor="#a1a1aa" value={eventDescription} onChangeText={setEventDescription} multiline numberOfLines={3} />
+              <Text style={[styles.inputLabelText, { color: colors.textMuted }]}>FULL DESCRIPTION</Text>
+              <TextInput style={[styles.formInputBox, styles.multilineInputBox, inputThemeStyle]} placeholder="Provide detailed breakdowns..." placeholderTextColor={colors.textMuted} value={eventDescription} onChangeText={setEventDescription} multiline numberOfLines={3} />
 
               <View style={styles.formGridRow}>
                 <View style={styles.gridColumnItem}>
-                  <Text style={styles.inputLabelText}>CATEGORY</Text>
-                  <TextInput style={styles.formInputBox} placeholder="Gaming, Music.." placeholderTextColor="#a1a1aa" value={eventCategory} onChangeText={setEventCategory} />
+                  <Text style={[styles.inputLabelText, { color: colors.textMuted }]}>CATEGORY</Text>
+                  <TextInput style={[styles.formInputBox, inputThemeStyle]} placeholder="Gaming, Music.." placeholderTextColor={colors.textMuted} value={eventCategory} onChangeText={setEventCategory} />
                 </View>
                 <View style={styles.gridColumnItem}>
-                  <Text style={styles.inputLabelText}>TAGS</Text>
-                  <TextInput style={styles.formInputBox} placeholder="live, indie, chill" placeholderTextColor="#a1a1aa" value={eventTags} onChangeText={setEventTags} />
+                  <Text style={[styles.inputLabelText, { color: colors.textMuted }]}>TAGS</Text>
+                  <TextInput style={[styles.formInputBox, inputThemeStyle]} placeholder="live, indie, chill" placeholderTextColor={colors.textMuted} value={eventTags} onChangeText={setEventTags} />
                 </View>
               </View>
 
               <View style={styles.formGridRow}>
                 <View style={styles.gridColumnItem}>
-                  <Text style={styles.inputLabelText}>EVENT DATE</Text>
-                  <TextInput style={styles.formInputBox} placeholder="e.g., June 15, 2026" placeholderTextColor="#a1a1aa" value={eventDate} onChangeText={setEventDate} />
+                  <Text style={[styles.inputLabelText, { color: colors.textMuted }]}>EVENT DATE</Text>
+                  <TextInput style={[styles.formInputBox, inputThemeStyle]} placeholder="e.g., June 15, 2026" placeholderTextColor={colors.textMuted} value={eventDate} onChangeText={setEventDate} />
                 </View>
                 <View style={styles.gridColumnItem}>
-                  <Text style={styles.inputLabelText}>STARTING TIME</Text>
-                  <TextInput style={styles.formInputBox} placeholder="e.g., 6:00 PM IST" placeholderTextColor="#a1a1aa" value={eventTime} onChangeText={setEventTime} />
+                  <Text style={[styles.inputLabelText, { color: colors.textMuted }]}>STARTING TIME</Text>
+                  <TextInput style={[styles.formInputBox, inputThemeStyle]} placeholder="e.g., 6:00 PM IST" placeholderTextColor={colors.textMuted} value={eventTime} onChangeText={setEventTime} />
                 </View>
               </View>
 
-              <Text style={styles.inputLabelText}>PINPOINT EVENT LOCATION</Text>
+              <Text style={[styles.inputLabelText, { color: colors.textMuted }]}>PINPOINT EVENT LOCATION</Text>
               <Text style={styles.inputSubhintText}>Drag and scroll map to align the focal marker at the venue point</Text>
               
-              <View style={styles.mapContainerFrame}>
+              <View style={[styles.mapContainerFrame, { borderColor: colors.cardBorder }]}>
                 <MapView 
                   style={styles.embeddedMapRender}
                   initialRegion={INITIAL_REGION}
                   onRegionChangeComplete={handleRegionChangeComplete}
                   showsUserLocation={true}
+                  userInterfaceStyle={theme} // <-- Native Apple/Google map elements turn dark!
                 />
                 <View style={styles.fixedPinOverlayContainer} pointerEvents="none">
-                  <Ionicons name="location" size={36} color="#18181b" />
+                  <Ionicons name="location" size={36} color={colors.textPrimary} />
                   <View style={styles.pinShadowDot} />
                 </View>
               </View>
 
-              <Text style={styles.inputLabelText}>WRITTEN VENUE ADDRESS</Text>
-              <TextInput style={styles.formInputBox} placeholder="e.g., Room 302, Phase 2, IT Hub Buildings" placeholderTextColor="#a1a1aa" value={address} onChangeText={setAddress} />
+              <Text style={[styles.inputLabelText, { color: colors.textMuted }]}>WRITTEN VENUE ADDRESS</Text>
+              <TextInput style={[styles.formInputBox, inputThemeStyle]} placeholder="e.g., Room 302, Phase 2, IT Hub Buildings" placeholderTextColor={colors.textMuted} value={address} onChangeText={setAddress} />
 
-              <Text style={styles.inputLabelText}>CONTACT EMAIL</Text>
-              <TextInput style={styles.formInputBox} placeholder="contact@host.com" placeholderTextColor="#a1a1aa" keyboardType="email-address" value={eventEmail} onChangeText={setEventEmail} />
+              <Text style={[styles.inputLabelText, { color: colors.textMuted }]}>CONTACT EMAIL</Text>
+              <TextInput style={[styles.formInputBox, inputThemeStyle]} placeholder="contact@host.com" placeholderTextColor={colors.textMuted} keyboardType="email-address" value={eventEmail} onChangeText={setEventEmail} />
 
-              <Text style={styles.inputLabelText}>CONTACT PHONE</Text>
-              <TextInput style={styles.formInputBox} placeholder="+91 XXXXX XXXXX" placeholderTextColor="#a1a1aa" keyboardType="phone-pad" value={eventPhone} onChangeText={setEventPhone} />
+              <Text style={[styles.inputLabelText, { color: colors.textMuted }]}>CONTACT PHONE</Text>
+              <TextInput style={[styles.formInputBox, inputThemeStyle]} placeholder="+91 XXXXX XXXXX" placeholderTextColor={colors.textMuted} keyboardType="phone-pad" value={eventPhone} onChangeText={setEventPhone} />
 
-              <TouchableOpacity style={styles.submitEventFormButton} activeOpacity={0.8} onPress={handleCreateEventSubmit}>
-                <Text style={styles.submitFormButtonText}>Publish Live Broadcast</Text>
+              <TouchableOpacity style={[styles.submitEventFormButton, { backgroundColor: colors.textPrimary }]} activeOpacity={0.8} onPress={handleCreateEventSubmit}>
+                <Text style={[styles.submitFormButtonText, { color: colors.background }]}>Publish Live Broadcast</Text>
               </TouchableOpacity>
             </ScrollView>
           </View>
@@ -341,10 +350,8 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#ffffff' },
+  container: { flex: 1 },
   scrollContent: { paddingBottom: 40 },
-  
-  // Header styles updated for the elegant Mela aesthetic stacking layout
   headerBar: {
     height: 120,
     paddingTop: 50,
@@ -352,13 +359,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#ffffff',
     borderBottomWidth: 1,
-    borderBottomColor: '#f4f4f5',
   },
   headerTitleContainer: { flex: 1, justifyContent: 'center' },
   headerSub: { fontSize: 11, fontWeight: '900', color: '#eab308', letterSpacing: 2, textTransform: 'uppercase' },
-  headerTitle: { fontSize: 28, fontWeight: '900', color: '#18181b', letterSpacing: -0.5, marginTop: 1 },
+  headerTitle: { fontSize: 28, fontWeight: '900', letterSpacing: -0.5, marginTop: 1 },
   hamburgerButton: { padding: 6, alignSelf: 'center' },
 
   profileHeroSection: { alignItems: 'center', marginTop: 24, paddingHorizontal: '8%' },
@@ -366,8 +371,6 @@ const styles = StyleSheet.create({
     padding: 5,
     borderRadius: 60,
     borderWidth: 1,
-    borderColor: '#e4e4e7',
-    backgroundColor: '#ffffff',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.05,
@@ -375,19 +378,17 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   avatarImage: { width: 100, height: 100, borderRadius: 50 },
-  profileName: { fontSize: 22, fontWeight: '900', color: '#18181b', marginTop: 16 },
+  profileName: { fontSize: 22, fontWeight: '900', marginTop: 16 },
   profileUsername: { fontSize: 13, fontWeight: '600', color: '#a1a1aa', marginTop: 2 },
-  profileBio: { fontSize: 13, color: '#52525b', textAlign: 'center', marginTop: 12, lineHeight: 18, fontWeight: '500' },
+  profileBio: { fontSize: 13, textAlign: 'center', marginTop: 12, lineHeight: 18, fontWeight: '500' },
 
   statsCardContainer: {
     flexDirection: 'row',
-    backgroundColor: '#ffffff',
     marginHorizontal: '6%',
     borderRadius: 20,
     paddingVertical: 18,
     marginTop: 28,
     borderWidth: 1,
-    borderColor: '#e4e4e7',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.03,
@@ -395,13 +396,12 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   statSegment: { flex: 1, alignItems: 'center' },
-  statValue: { fontSize: 18, fontWeight: '900', color: '#18181b' },
-  statLabel: { fontSize: 11, fontWeight: '600', color: '#71717a', marginTop: 2 },
-  statDivider: { width: 1, backgroundColor: '#f4f4f5', height: '100%' },
+  statValue: { fontSize: 18, fontWeight: '900' },
+  statLabel: { fontSize: 11, fontWeight: '600', marginTop: 2 },
+  statDivider: { width: 1, height: '100%' },
 
   organizeBannerButton: {
     flexDirection: 'row',
-    backgroundColor: '#fafafa',
     marginHorizontal: '6%',
     borderRadius: 20,
     padding: 16,
@@ -409,47 +409,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderWidth: 1,
-    borderColor: '#e4e4e7',
   },
   bannerLeftInfo: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   bannerIconBox: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#e4e4e7',
   },
-  bannerMainText: { fontSize: 14, fontWeight: '800', color: '#18181b' },
-  bannerSubText: { fontSize: 11, fontWeight: '500', color: '#71717a', marginTop: 1 },
+  bannerMainText: { fontSize: 14, fontWeight: '800' },
+  bannerSubText: { fontSize: 11, fontWeight: '500', marginTop: 1 },
 
   sectionSectionWrapper: { marginTop: 32 },
   sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: '6%', marginBottom: 14 },
-  sectionHeadingText: { fontSize: 16, fontWeight: '900', color: '#18181b', letterSpacing: -0.3 },
-  viewAllTextLink: { fontSize: 12, fontWeight: '700', color: '#71717a' },
+  sectionHeadingText: { fontSize: 16, fontWeight: '900', letterSpacing: -0.3 },
+  viewAllTextLink: { fontSize: 12, fontWeight: '700' },
   likedHorizontalScroll: { paddingLeft: '6%', paddingRight: 20, gap: 14 },
   eventMiniCard: {
     width: SCREEN_WIDTH * 0.44,
-    backgroundColor: '#ffffff',
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#e4e4e7',
     overflow: 'hidden',
   },
   eventMiniCardImage: { width: '100%', height: 105, backgroundColor: '#f4f4f5' },
   miniCategoryIndicator: { height: 3, width: '100%' },
   miniCardTextContent: { padding: 12 },
-  miniEventTitle: { fontSize: 13, fontWeight: '800', color: '#18181b' },
+  miniEventTitle: { fontSize: 13, fontWeight: '800' },
   miniLocationRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
-  miniLocationText: { fontSize: 10, color: '#71717a', fontWeight: '500', flex: 1 },
+  miniLocationText: { fontSize: 10, fontWeight: '500', flex: 1 },
   insightsSubtext: { fontSize: 11, color: '#8b5cf6', fontWeight: '700', marginTop: 1 },
 
-  // Bottom Analytics Sheet Mechanics
   bottomSheetBackdrop: { flex: 1, backgroundColor: 'rgba(24, 24, 27, 0.4)', justifyContent: 'flex-end' },
   analyticsSheetContainer: {
-    backgroundColor: '#ffffff',
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     padding: 24,
@@ -460,9 +453,9 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 5,
   },
-  sheetHeaderIndicator: { width: 38, height: 4, backgroundColor: '#e4e4e7', borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
+  sheetHeaderIndicator: { width: 38, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
   sheetSubheading: { fontSize: 10, fontWeight: '900', color: '#a1a1aa', letterSpacing: 1.5, marginBottom: 4 },
-  sheetTitleText: { fontSize: 20, fontWeight: '900', color: '#18181b', marginBottom: 24 },
+  sheetTitleText: { fontSize: 20, fontWeight: '900', marginBottom: 24 },
   analyticsStatsGrid: { gap: 12, marginBottom: 12 },
   analyticCard: {
     flexDirection: 'row',
@@ -470,33 +463,30 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 16,
     borderWidth: 1,
-    backgroundColor: '#fafafa',
   },
-  analyticValue: { fontSize: 20, fontWeight: '900', color: '#18181b', marginLeft: 12, marginRight: 6 },
-  analyticLabel: { fontSize: 13, fontWeight: '600', color: '#52525b' },
+  analyticValue: { fontSize: 20, fontWeight: '900', marginLeft: 12, marginRight: 6 },
+  analyticLabel: { fontSize: 13, fontWeight: '600' },
   closeSheetButton: {
-    backgroundColor: '#18181b',
     height: 48,
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 16,
   },
-  closeSheetButtonText: { color: '#ffffff', fontSize: 13, fontWeight: '700' },
+  closeSheetButtonText: { fontSize: 13, fontWeight: '700' },
 
   menuOverlayBackground: { flex: 1, backgroundColor: 'rgba(24, 24, 27, 0.3)', justifyContent: 'flex-end', flexDirection: 'row' },
-  hamburgerSidePanel: { width: SCREEN_WIDTH * 0.72, height: '100%', backgroundColor: '#ffffff', paddingHorizontal: 24, paddingBottom: 40 },
+  hamburgerSidePanel: { width: SCREEN_WIDTH * 0.72, height: '100%', paddingHorizontal: 24, paddingBottom: 40 },
   panelTopHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 50 },
-  panelHeaderTitle: { fontSize: 16, fontWeight: '900', color: '#18181b' },
-  panelDivider: { height: 1, backgroundColor: '#f4f4f5', marginVertical: 20 },
+  panelHeaderTitle: { fontSize: 16, fontWeight: '900' },
+  panelDivider: { height: 1, marginVertical: 20 },
   panelRowLink: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, gap: 12 },
-  panelLinkText: { fontSize: 14, fontWeight: '600', color: '#4b5563' },
+  panelLinkText: { fontSize: 14, fontWeight: '600' },
   logoutActionLink: { marginTop: 'auto' },
   logoutLinkText: { fontSize: 14, fontWeight: '700', color: '#ef4444' },
 
   modalKeyboardAvoidingContainer: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(24, 24, 27, 0.4)' },
   organizeModalWindow: {
-    backgroundColor: '#ffffff',
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     paddingHorizontal: 24,
@@ -504,21 +494,18 @@ const styles = StyleSheet.create({
     maxHeight: SCREEN_HEIGHT * 0.88,
   },
   organizeHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  organizeModalTitle: { fontSize: 18, fontWeight: '900', color: '#18181b' },
+  organizeModalTitle: { fontSize: 18, fontWeight: '900' },
   organizeFormScroll: { marginTop: 4 },
   modalFormContentStyle: { paddingBottom: Platform.OS === 'ios' ? 44 : 24 },
-  inputLabelText: { fontSize: 10, fontWeight: '800', color: '#71717a', letterSpacing: 0.5, marginBottom: 6, marginTop: 14 },
+  inputLabelText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5, marginBottom: 6, marginTop: 14 },
   inputSubhintText: { fontSize: 11, color: '#a1a1aa', fontWeight: '500', marginBottom: 10, marginTop: -3 },
   formInputBox: {
     borderWidth: 1,
-    borderColor: '#e4e4e7',
     borderRadius: 12,
     paddingHorizontal: 14,
     height: 46,
     fontSize: 13,
-    color: '#18181b',
     fontWeight: '500',
-    backgroundColor: '#fafafa',
   },
   multilineInputBox: { height: 76, paddingTop: 12, paddingBottom: 12, textAlignVertical: 'top' },
   formGridRow: { flexDirection: 'row', gap: 12 },
@@ -530,7 +517,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#e4e4e7',
     position: 'relative',
     marginTop: 4,
   },
@@ -545,16 +531,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   pinShadowDot: { width: 6, height: 3, borderRadius: 2, backgroundColor: 'rgba(0,0,0,0.3)', marginTop: -2 },
-  coordinateIndicatorRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4, marginTop: 6 },
-  coordinateItemText: { fontSize: 11, fontWeight: '700', color: '#71717a', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
-
   submitEventFormButton: {
-    backgroundColor: '#18181b',
     height: 52,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 28,
   },
-  submitFormButtonText: { color: '#ffffff', fontSize: 14, fontWeight: '700' },
+  submitFormButtonText: { fontSize: 14, fontWeight: '700' },
 });

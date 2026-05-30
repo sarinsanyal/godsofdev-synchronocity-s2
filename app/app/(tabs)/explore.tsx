@@ -5,10 +5,15 @@ import * as Location from 'expo-location';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import { MOCK_EVENTS, DatabaseEvent } from '../../constants/mockData';
+import { useAppTheme } from '../_layout'; // <-- Wire up our global layout theme controller
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function ExploreScreen() {
+  // 1. Consume the master theme tokens
+  const { theme, colors } = useAppTheme();
+  const isDark = theme === 'dark';
+
   const mapRef = useRef<MapView | null>(null);
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -47,12 +52,12 @@ export default function ExploreScreen() {
 
   const getCategoryTheme = (category: string) => {
     switch (category) {
-      case 'Gaming': return { color: '#8b5cf6', icon: 'game-controller', bg: '#f5f3ff', text: '#5b21b6' };
-      case 'Food': return { color: '#f97316', icon: 'pizza', bg: '#fff7ed', text: '#9a3412' };
-      case 'Tech': return { color: '#06b6d4', icon: 'code-working', bg: '#ecfeff', text: '#083344' };
-      case 'Art': return { color: '#ec4899', icon: 'color-palette', bg: '#fdf2f8', text: '#9d174d' };
-      case 'Wellness': return { color: '#10b981', icon: 'leaf', bg: '#ecfdf5', text: '#065f46' };
-      default: return { color: '#3b82f6', icon: 'musical-notes', bg: '#eff6ff', text: '#1e40af' };
+      case 'Gaming': return { color: '#8b5cf6', icon: 'game-controller', bg: isDark ? '#2e1065' : '#f5f3ff', text: isDark ? '#ddd6fe' : '#5b21b6' };
+      case 'Food': return { color: '#f97316', icon: 'pizza', bg: isDark ? '#7c2d12' : '#fff7ed', text: isDark ? '#ffedd5' : '#9a3412' };
+      case 'Tech': return { color: '#06b6d4', icon: 'code-working', bg: isDark ? '#164e63' : '#ecfeff', text: isDark ? '#cffafe' : '#083344' };
+      case 'Art': return { color: '#ec4899', icon: 'color-palette', bg: isDark ? '#831843' : '#fdf2f8', text: isDark ? '#fce7f3' : '#9d174d' };
+      case 'Wellness': return { color: '#10b981', icon: 'leaf', bg: isDark ? '#064e3b' : '#ecfdf5', text: isDark ? '#d1fae5' : '#065f46' };
+      default: return { color: '#3b82f6', icon: 'musical-notes', bg: isDark ? '#1e3a8a' : '#eff6ff', text: isDark ? '#dbeafe' : '#1e40af' };
     }
   };
 
@@ -86,7 +91,6 @@ export default function ExploreScreen() {
   };
 
   const handleSelectEvent = (event: DatabaseEvent) => {
-    // Prevent exploring item if already downvoted away
     if (dislikedEvents.includes(event.id)) return;
     Keyboard.dismiss();
     setIsSearchFocused(false);
@@ -103,7 +107,6 @@ export default function ExploreScreen() {
     }
   };
 
-  // 🛠️ Interaction Logic Pipelines
   const toggleLikeEvent = (id: string) => {
     setLikedEvents(prev => 
       prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
@@ -113,8 +116,8 @@ export default function ExploreScreen() {
   const toggleDislikeEvent = (id: string) => {
     if (!dislikedEvents.includes(id)) {
       setDislikedEvents(prev => [...prev, id]);
-      setLikedEvents(prev => prev.filter(item => item !== id)); // Strip like status if downvoted
-      setSelectedEvent(null); // Instantly clean out dashboard modal view
+      setLikedEvents(prev => prev.filter(item => item !== id));
+      setSelectedEvent(null);
     } else {
       setDislikedEvents(prev => prev.filter(item => item !== id));
     }
@@ -122,9 +125,9 @@ export default function ExploreScreen() {
 
   if (loading) {
     return (
-      <View style={styles.loaderContainer}>
+      <View style={[styles.loaderContainer, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color="#eab308" />
-        <Text style={styles.loaderText}>Pinging GPS Coordinates...</Text>
+        <Text style={[styles.loaderText, { color: colors.textSecondary }]}>Pinging GPS Coordinates...</Text>
       </View>
     );
   }
@@ -136,8 +139,11 @@ export default function ExploreScreen() {
     longitudeDelta: STREET_LNG_DELTA,
   } : DEFAULT_FALLBACK;
 
+  // Shared Theme Styles definitions
+  const sharedCardStyle = { backgroundColor: colors.cardBg, borderColor: colors.cardBorder };
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <MapView
         ref={mapRef}
         provider={PROVIDER_GOOGLE}
@@ -145,6 +151,7 @@ export default function ExploreScreen() {
         initialRegion={initialRegion}
         showsUserLocation={true}
         showsMyLocationButton={false}
+        userInterfaceStyle={theme} // <-- Native Apple/Google map elements adapt to theme!
         onPress={() => {
           setSelectedEvent(null);
           setIsSearchFocused(false);
@@ -152,7 +159,7 @@ export default function ExploreScreen() {
         }}
       >
         {filteredEvents.map((event) => {
-          const theme = getCategoryTheme(event.category);
+          const catTheme = getCategoryTheme(event.category);
           const isActive = selectedEvent?.id === event.id;
           const isDisliked = dislikedEvents.includes(event.id);
 
@@ -167,15 +174,14 @@ export default function ExploreScreen() {
                 e.stopPropagation();
                 handleSelectEvent(event);
               }}
-              // Visually dim or fade marker down to hint that it is disliked
               opacity={isDisliked ? 0.25 : 1.0}
             >
               <View style={[
                 styles.markerContainer,
-                { backgroundColor: theme.color },
-                isActive && styles.markerActive
+                { backgroundColor: catTheme.color },
+                isActive && [styles.markerActive, { borderColor: colors.textPrimary }]
               ]}>
-                <Ionicons name={theme.icon as any} size={15} color="#ffffff" />
+                <Ionicons name={catTheme.icon as any} size={15} color="#ffffff" />
               </View>
             </Marker>
           );
@@ -184,12 +190,12 @@ export default function ExploreScreen() {
 
       {/* 🔍 FLOATING SEARCH INTERFACE ENGINE */}
       <View style={styles.searchContainer}>
-        <View style={styles.searchBarWrapper}>
-          <Ionicons name="search" size={20} color="#71717a" style={styles.searchIcon} />
+        <View style={[styles.searchBarWrapper, sharedCardStyle]}>
+          <Ionicons name="search" size={20} color={colors.textMuted} style={styles.searchIcon} />
           <TextInput
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: colors.textPrimary }]}
             placeholder="Search locations, events, types..."
-            placeholderTextColor="#a1a1aa"
+            placeholderTextColor={colors.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
             onFocus={() => setIsSearchFocused(true)}
@@ -199,17 +205,17 @@ export default function ExploreScreen() {
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Ionicons name="close-circle" size={18} color="#71717a" style={styles.searchClearIcon} />
+              <Ionicons name="close-circle" size={18} color={colors.textMuted} style={styles.searchClearIcon} />
             </TouchableOpacity>
           )}
         </View>
 
         {/* 📋 DYNAMIC SEARCH SUGGESTION DROPDOWN LIST */}
         {isSearchFocused && searchQuery.trim().length > 0 && (
-          <View style={styles.dropdownPanel}>
+          <View style={[styles.dropdownPanel, sharedCardStyle]}>
             {filteredEvents.filter(ev => !dislikedEvents.includes(ev.id)).length === 0 ? (
               <View style={styles.noResultsBox}>
-                <Text style={styles.noResultsText}>No events match your criteria</Text>
+                <Text style={[styles.noResultsText, { color: colors.textMuted }]}>No events match your criteria</Text>
               </View>
             ) : (
               <FlatList
@@ -218,20 +224,20 @@ export default function ExploreScreen() {
                 keyboardShouldPersistTaps="handled"
                 style={{ maxHeight: 240 }}
                 renderItem={({ item }) => {
-                  const theme = getCategoryTheme(item.category);
+                  const catTheme = getCategoryTheme(item.category);
                   return (
                     <TouchableOpacity
-                      style={styles.dropdownRow}
+                      style={[styles.dropdownRow, { borderBottomColor: colors.cardBorder }]}
                       onPress={() => handleSelectEvent(item)}
                     >
-                      <View style={[styles.listIconContainer, { backgroundColor: theme.color }]}>
-                        <Ionicons name={theme.icon as any} size={14} color="#ffffff" />
+                      <View style={[styles.listIconContainer, { backgroundColor: catTheme.color }]}>
+                        <Ionicons name={catTheme.icon as any} size={14} color="#ffffff" />
                       </View>
                       <View style={styles.listTextContainer}>
-                        <Text style={styles.listTitle} numberOfLines={1}>{item.title}</Text>
-                        <Text style={styles.listSub} numberOfLines={1}>{item.location.address}</Text>
+                        <Text style={[styles.listTitle, { color: colors.textPrimary }]} numberOfLines={1}>{item.title}</Text>
+                        <Text style={[styles.listSub, { color: colors.textMuted }]} numberOfLines={1}>{item.location.address}</Text>
                       </View>
-                      <Ionicons name="chevron-forward" size={14} color="#a1a1aa" />
+                      <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
                     </TouchableOpacity>
                   );
                 }}
@@ -245,23 +251,23 @@ export default function ExploreScreen() {
       <TouchableOpacity 
         style={[
           styles.locationButton, 
+          sharedCardStyle,
           { bottom: selectedEvent ? 30 : 110 }
         ]} 
         onPress={snapToCurrentLocation}
         activeOpacity={0.8}
       >
-        <FontAwesome6 name="location-crosshairs" size={22} color="#18181b" />
+        <FontAwesome6 name="location-crosshairs" size={22} color={colors.textPrimary} />
       </TouchableOpacity>
 
       {/* 📋 CENTRALIZED FULL-SCREEN MODAL EVENT DISPLAY */}
       {selectedEvent && (() => {
-        const theme = getCategoryTheme(selectedEvent.category);
+        const catTheme = getCategoryTheme(selectedEvent.category);
         const isLiked = likedEvents.includes(selectedEvent.id);
-        const isDisliked = dislikedEvents.includes(selectedEvent.id);
 
         return (
           <View style={styles.modalBlurOverlay}>
-            <View style={styles.centerHeroCard}>
+            <View style={[styles.centerHeroCard, sharedCardStyle]}>
               <Image source={{ uri: selectedEvent.image_url }} style={styles.heroCardImage} />
               
               <TouchableOpacity 
@@ -273,32 +279,32 @@ export default function ExploreScreen() {
               </TouchableOpacity>
 
               <View style={styles.heroCardContent}>
-                <View style={[styles.tagContainer, { backgroundColor: theme.bg, borderColor: theme.color }]}>
-                  <Text style={[styles.categoryBadgeText, { color: theme.text }]}>
+                <View style={[styles.tagContainer, { backgroundColor: catTheme.bg, borderColor: catTheme.color }]}>
+                  <Text style={[styles.categoryBadgeText, { color: catTheme.text }]}>
                     ⚡ {selectedEvent.category.toUpperCase()}
                   </Text>
                 </View>
 
-                <Text style={styles.heroCardTitle}>{selectedEvent.title}</Text>
+                <Text style={[styles.heroCardTitle, { color: colors.textPrimary }]}>{selectedEvent.title}</Text>
                 <Text style={styles.heroCardSummary}>{selectedEvent.summary}</Text>
-                <Text style={styles.heroCardDesc}>{selectedEvent.description}</Text>
+                <Text style={[styles.heroCardDesc, { color: colors.textSecondary }]}>{selectedEvent.description}</Text>
 
-                <View style={styles.dividerLine} />
+                <View style={[styles.dividerLine, { backgroundColor: colors.cardBorder }]} />
 
                 <View style={styles.metaRow}>
-                  <Ionicons name="navigate-circle" size={18} color={theme.color} />
-                  <Text style={styles.metaText} numberOfLines={2}>{selectedEvent.location.address}</Text>
+                  <Ionicons name="navigate-circle" size={18} color={catTheme.color} />
+                  <Text style={[styles.metaText, { color: colors.textSecondary }]} numberOfLines={2}>{selectedEvent.location.address}</Text>
                 </View>
 
                 <View style={[styles.metaRow, { marginTop: 8, marginBottom: 4 }]}>
-                  <Ionicons name="mail" size={16} color="#71717a" />
-                  <Text style={styles.metaText} numberOfLines={1}>{selectedEvent.contact_email}</Text>
+                  <Ionicons name="mail" size={16} color={colors.textMuted} />
+                  <Text style={[styles.metaText, { color: colors.textSecondary }]} numberOfLines={1}>{selectedEvent.contact_email}</Text>
                 </View>
 
-                {/* ⚡ UPDATED: SWIPE-INSPIRED LIKE & DISLIKE INTERACTION CONTROL ROW */}
+                {/* ⚡ SWIPE-INSPIRED LIKE & DISLIKE INTERACTION CONTROL ROW */}
                 <View style={styles.actionButtonRow}>
                   <TouchableOpacity
-                    style={[styles.actionButton, styles.dislikeButton]}
+                    style={[styles.actionButton, styles.dislikeButton, isDark && { backgroundColor: '#451a1a', borderColor: '#7f1d1d' }]}
                     activeOpacity={0.7}
                     onPress={() => toggleDislikeEvent(selectedEvent.id)}
                   >
@@ -310,6 +316,7 @@ export default function ExploreScreen() {
                     style={[
                       styles.actionButton, 
                       styles.likeButton,
+                      isDark && { backgroundColor: '#14532d', borderColor: '#166534' },
                       isLiked && { backgroundColor: '#22c55e', borderColor: '#22c55e' }
                     ]}
                     activeOpacity={0.7}
@@ -336,10 +343,10 @@ export default function ExploreScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#ffffff' },
+  container: { flex: 1 },
   map: { width: SCREEN_WIDTH, height: SCREEN_HEIGHT },
-  loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' },
-  loaderText: { marginTop: 12, fontSize: 14, color: '#71717a', fontWeight: '600' },
+  loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loaderText: { marginTop: 12, fontSize: 14, fontWeight: '600' },
   
   markerContainer: {
     padding: 9,
@@ -355,7 +362,7 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   markerActive: {
-    borderColor: '#18181b',
+    borderWidth: 2.5,
     transform: [{ scale: 1.3 }],
     shadowOpacity: 0.3,
   },
@@ -369,7 +376,6 @@ const styles = StyleSheet.create({
   },
   searchBarWrapper: {
     height: 52,
-    backgroundColor: '#ffffff',
     borderRadius: 16,
     flexDirection: 'row',
     alignItems: 'center',
@@ -380,14 +386,12 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 5,
     borderWidth: 1,
-    borderColor: '#e4e4e7',
   },
   searchIcon: { marginRight: 10 },
-  searchInput: { flex: 1, color: '#18181b', fontSize: 14, fontWeight: '500', height: '100%' },
+  searchInput: { flex: 1, fontSize: 14, fontWeight: '500', height: '100%' },
   searchClearIcon: { marginLeft: 8 },
 
   dropdownPanel: {
-    backgroundColor: '#ffffff',
     borderRadius: 16,
     marginTop: 8,
     paddingVertical: 8,
@@ -397,7 +401,6 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 8,
     borderWidth: 1,
-    borderColor: '#e4e4e7',
     overflow: 'hidden',
   },
   dropdownRow: {
@@ -406,7 +409,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f4f4f5',
   },
   listIconContainer: {
     width: 28,
@@ -417,10 +419,10 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   listTextContainer: { flex: 1 },
-  listTitle: { fontSize: 14, fontWeight: '700', color: '#18181b' },
-  listSub: { fontSize: 11, color: '#71717a', marginTop: 1 },
+  listTitle: { fontSize: 14, fontWeight: '700' },
+  listSub: { fontSize: 11, marginTop: 1 },
   noResultsBox: { padding: 16, alignItems: 'center' },
-  noResultsText: { fontSize: 13, color: '#a1a1aa', fontWeight: '500' },
+  noResultsText: { fontSize: 13, fontWeight: '500' },
 
   locationButton: {
     position: 'absolute',
@@ -428,7 +430,6 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -437,22 +438,20 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 6,
     borderWidth: 1,
-    borderColor: '#f4f4f5',
     zIndex: 999,
   },
 
   modalBlurOverlay: {
     position: 'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(24, 24, 27, 0.35)',
+    backgroundColor: 'rgba(24, 24, 27, 0.45)',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 1001,
   },
   centerHeroCard: {
     width: SCREEN_WIDTH * 0.88,
-    maxHeight: SCREEN_HEIGHT * 0.80, // Slightly expanded to fit beautiful actions row
-    backgroundColor: '#ffffff',
+    maxHeight: SCREEN_HEIGHT * 0.80,
     borderRadius: 32,
     overflow: 'hidden',
     shadowColor: '#000',
@@ -460,6 +459,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 30,
     elevation: 15,
+    borderWidth: 1,
   },
   heroCardImage: { width: '100%', height: SCREEN_HEIGHT * 0.25, backgroundColor: '#e4e4e7' },
   closeCardButton: {
@@ -475,14 +475,13 @@ const styles = StyleSheet.create({
   heroCardContent: { padding: 24 },
   tagContainer: { borderWidth: 1, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginBottom: 10 },
   categoryBadgeText: { fontSize: 10, fontWeight: '900' },
-  heroCardTitle: { fontSize: 22, fontWeight: '900', color: '#18181b', lineHeight: 28 },
+  heroCardTitle: { fontSize: 22, fontWeight: '900', lineHeight: 28 },
   heroCardSummary: { fontSize: 14, color: '#eab308', fontWeight: '700', marginTop: 4 },
-  heroCardDesc: { fontSize: 13, color: '#71717a', marginTop: 8, lineHeight: 18 },
-  dividerLine: { height: 1, backgroundColor: '#f4f4f5', marginTop: 14, marginBottom: 14 },
+  heroCardDesc: { fontSize: 13, marginTop: 8, lineHeight: 18 },
+  dividerLine: { height: 1, marginTop: 14, marginBottom: 14 },
   metaRow: { flexDirection: 'row', alignItems: 'center' },
-  metaText: { fontSize: 12, color: '#4b5563', marginLeft: 8, fontWeight: '600', flex: 1 },
+  metaText: { fontSize: 12, marginLeft: 8, fontWeight: '600', flex: 1 },
 
-  // ⚡ Button Layout Configurations
   actionButtonRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
