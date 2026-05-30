@@ -1,34 +1,33 @@
-..................API.ts..............
-Here is a breakdown of exactly what each of the four routes in that file is doing:
-
-1. GET /events (The Map Populator)
-What it does: This route powers the core campus map. The mobile app sends the user's current GPS coordinates (lat, lng) and a search radius.
-
-The Magic: Instead of pulling down every event in the database, it uses supabase.rpc() to trigger the get_events_within_radius PostGIS spatial function we wrote in SQL. It returns only the events physically close to the user.
-
-2. POST /events (The Organizer Hub)
-What it does: This allows event organizers to publish new events to the platform.
-
-The Security: Right now, it checks the x-mock-user-role header to ensure only "admins" can create events.
-
-The Magic: It takes the form data (title, category, contact info) and inserts it into the events table. Crucially, it converts the raw latitude and longitude into a specialized POINT(lng lat) format that PostGIS requires for spatial indexing.
-
-3. POST /rsvp (The Data Collector)
-What it does: Handles the logic when a user clicks the "Going" button on an event.
-
-The Magic: It does two distinct things in the database simultaneously:
-
-It logs the actual RSVP into the rsvps table so the user's status is updated.
-
-It writes a high-value score (3.0) into the user_interactions table. This is essential, as this table is the "fuel" that the collaborative filtering ML model uses to learn what users actually like.
-
-4. GET /recommendations (The "Smart" Proxy)
-What it does: This route powers the personalized "For You" feed in the mobile app.
-
-The Magic: It acts as a middleman (proxy) to merge your two different tech stacks:
-
-It first pings the Flask Python service (http://localhost:5000/recommend) and says, "Give me the top event IDs for this specific user."
-
-The Python service returns a list of ranked IDs and the AI reasoning (e.g., "🔥 Popular with tech students"), but it doesn't have the event titles or images.
-
-api.ts then takes those IDs, asks Supabase for the full event details, stitches the ML reasoning and the database details together, and sends the completed "hydrated" cards back to the mobile feed.
+This document outlines the core API routes handled by the api.ts router. All routes defined here are mounted under the /api prefix in server.ts (e.g., /events becomes /api/events).1. Get Events (Map Feed)Fetches a list of events within a specific geographic radius using PostGIS.URL: /api/eventsMethod: GETAuth Required: NoQuery ParametersParameterTypeRequiredDescriptionlatFloatYesUser's current latitudelngFloatYesUser's current longituderadiusIntegerYesSearch radius in metersSuccess Response (200 OK)Returns an array of event objects matching the radius criteria.JSON[
+  {
+    "id": "uuid",
+    "title": "Hackathon 2024",
+    "lat": 22.5726,
+    "lng": 88.3639,
+    "...": "other event fields"
+  }
+]
+2. Create Event (Admin)Creates a new event and uploads an associated banner image to Supabase Storage.URL: /api/eventsMethod: POSTAuth Required: Yes (Admin only)Content-Type: multipart/form-data (Important: Do not send as JSON)HeadersHeaderRequiredDescriptionx-mock-user-idYesThe creator's user IDx-mock-user-roleYesMust be set to adminForm Data Payloadtitle (Text)description (Text)category (Text)lat (Float)lng (Float)contact_email (Text)contact_phone (Text)image (File) - The image file to uploadSuccess Response (201 Created)JSON{
+  "success": true,
+  "event": {
+    "id": "uuid",
+    "title": "Hackathon 2024",
+    "image_url": "https://<supabase-url>/storage/v1/object/public/event-images/...",
+    "...": "other event fields"
+  }
+}
+3. Post RSVPRegisters a user for an event and logs the interaction to feed the Machine Learning recommendation pipeline.URL: /api/rsvpMethod: POSTAuth Required: YesContent-Type: application/jsonHeadersHeaderRequiredDescriptionx-mock-user-idYesThe user's IDJSON BodyJSON{
+  "eventId": "uuid-of-the-event"
+}
+Success Response (200 OK)JSON{
+  "success": true,
+  "message": "RSVP confirmed!"
+}
+4. Get ML RecommendationsProxies a request to the local Flask ML service to get personalized event recommendations, then hydrates those IDs with full database records from Supabase.URL: /api/recommendationsMethod: GETAuth Required: YesHeadersHeaderRequiredDescriptionx-mock-user-idYesThe user's IDQuery ParametersParameterTypeRequiredDescriptionlatFloatNoUsed by ML to rank by distancelngFloatNoUsed by ML to rank by distanceSuccess Response (200 OK)Returns an array of event objects, appended with the AI's reasoning.JSON[
+  {
+    "id": "uuid",
+    "title": "AI Workshop",
+    "...": "other event fields",
+    "ml_reason": "Based on your high engagement with 'Technology' events."
+  }
+]

@@ -1,7 +1,11 @@
 import { Router, Request, Response } from 'express';
+import multer from 'multer';
 import { supabase } from '../config/supabase';
 
 const router = Router();
+
+// Configure multer for memory storage (files are kept in RAM temporarily before uploading to Supabase)
+const upload = multer({ storage: multer.memoryStorage() });
 
 // ==========================================
 // 1. GET EVENTS (Map Feed)
@@ -31,9 +35,10 @@ router.get('/events', async (req: Request, res: Response) => {
 });
 
 // ==========================================
-// 2. POST EVENT (Admin Creation)
+// 2. POST EVENT (Admin Creation with Image Upload)
 // ==========================================
-router.post('/events', async (req: Request, res: Response) => {
+// Added upload.single('image') middleware here
+router.post('/events', upload.single('image'), async (req: Request, res: Response) => {
   try {
     // TODO: Replace with Clerk auth later
     const userId = req.headers['x-mock-user-id'] as string;
@@ -43,8 +48,40 @@ router.post('/events', async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Forbidden: Admin access required' });
     }
 
+    // When using multer, text fields are in req.body, and the file is in req.file
     const { title, description, category, lat, lng, contact_email, contact_phone } = req.body;
+    const file = req.file;
+    let imageUrl = null;
 
+    // --- Image Upload Logic ---
+    if (file) {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+      // Clean the filename to avoid issues with spaces or special characters
+      const cleanFileName = file.originalname.replace(/[^a-zA-Z0-9.\-]/g, '_');
+      const fileName = `events/${uniqueSuffix}-${cleanFileName}`;
+
+      // Upload to Supabase Storage
+      const { data: storageData, error: storageError } = await supabase.storage
+        .from('event-images')
+        .upload(fileName, file.buffer, {
+          contentType: file.mimetype,
+        });
+
+      if (storageError) {
+        console.error('Supabase Storage Error:', storageError);
+        throw new Error(`Storage upload failed: ${storageError.message}`);
+      }
+
+      // Retrieve the public URL for the newly uploaded image
+      const { data: publicUrlData } = supabase.storage
+        .from('event-images')
+        .getPublicUrl(fileName);
+
+      imageUrl = publicUrlData.publicUrl;
+    }
+    // --------------------------
+
+    // Insert the event into the database
     const { data: newEvent, error } = await supabase
       .from('events')
       .insert([{
@@ -54,6 +91,7 @@ router.post('/events', async (req: Request, res: Response) => {
         organizer_id: userId,
         contact_email,
         contact_phone,
+        image_url: imageUrl, // Save the image URL we just generated
         location: `POINT(${lng} ${lat})` 
       }])
       .select()
@@ -62,9 +100,9 @@ router.post('/events', async (req: Request, res: Response) => {
     if (error) throw error;
 
     res.status(201).json({ success: true, event: newEvent });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Create Event Error:', error);
-    res.status(500).json({ error: 'Failed to create event' });
+    res.status(500).json({ error: error.message || 'Failed to create event' });
   }
 });
 
