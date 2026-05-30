@@ -4,7 +4,7 @@ import { supabase } from '../config/supabase';
 
 const router = Router();
 
-// Configure multer for memory storage (files are kept in RAM temporarily before uploading to Supabase)
+// Configure multer for memory storage
 const upload = multer({ storage: multer.memoryStorage() });
 
 // ==========================================
@@ -18,7 +18,6 @@ router.get('/events', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Missing lat, lng, or radius parameters' });
     }
 
-    // Calls the PostGIS function you created in the SQL editor
     const { data: events, error } = await supabase.rpc('get_events_within_radius', {
       user_lat: parseFloat(lat as string),
       user_lng: parseFloat(lng as string),
@@ -35,53 +34,39 @@ router.get('/events', async (req: Request, res: Response) => {
 });
 
 // ==========================================
-// 2. POST EVENT (Admin Creation with Image Upload)
+// 2. POST EVENT (Any User Creation)
 // ==========================================
-// Added upload.single('image') middleware here
 router.post('/events', upload.single('image'), async (req: Request, res: Response) => {
   try {
-    // TODO: Replace with Clerk auth later
     const userId = req.headers['x-mock-user-id'] as string;
-    const userRole = req.headers['x-mock-user-role'] as string; 
 
-    if (!userId || userRole !== 'admin') {
-      return res.status(403).json({ error: 'Forbidden: Admin access required' });
+    // CHANGED: Any logged-in user can now create an event
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized: You must be logged in to create an event' });
     }
 
-    // When using multer, text fields are in req.body, and the file is in req.file
     const { title, description, category, lat, lng, contact_email, contact_phone } = req.body;
     const file = req.file;
     let imageUrl = null;
 
-    // --- Image Upload Logic ---
     if (file) {
       const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-      // Clean the filename to avoid issues with spaces or special characters
       const cleanFileName = file.originalname.replace(/[^a-zA-Z0-9.\-]/g, '_');
       const fileName = `events/${uniqueSuffix}-${cleanFileName}`;
 
-      // Upload to Supabase Storage
       const { data: storageData, error: storageError } = await supabase.storage
         .from('event-images')
-        .upload(fileName, file.buffer, {
-          contentType: file.mimetype,
-        });
+        .upload(fileName, file.buffer, { contentType: file.mimetype });
 
-      if (storageError) {
-        console.error('Supabase Storage Error:', storageError);
-        throw new Error(`Storage upload failed: ${storageError.message}`);
-      }
+      if (storageError) throw new Error(`Storage upload failed: ${storageError.message}`);
 
-      // Retrieve the public URL for the newly uploaded image
       const { data: publicUrlData } = supabase.storage
         .from('event-images')
         .getPublicUrl(fileName);
 
       imageUrl = publicUrlData.publicUrl;
     }
-    // --------------------------
 
-    // Insert the event into the database
     const { data: newEvent, error } = await supabase
       .from('events')
       .insert([{
@@ -91,7 +76,7 @@ router.post('/events', upload.single('image'), async (req: Request, res: Respons
         organizer_id: userId,
         contact_email,
         contact_phone,
-        image_url: imageUrl, // Save the image URL we just generated
+        image_url: imageUrl,
         location: `POINT(${lng} ${lat})` 
       }])
       .select()
@@ -107,25 +92,96 @@ router.post('/events', upload.single('image'), async (req: Request, res: Respons
 });
 
 // ==========================================
-// 3. POST RSVP
+// 3. PUT EVENT (Update with Ownership Check)
+// ==========================================
+router.put('/events/:eventId', upload.single('image'), async (req: Request, res: Response) => {
+  try {
+    const userId = req.headers['x-mock-user-id'] as string;
+    const { eventId } = req.params;
+
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    // 1. Fetch event to verify ownership
+    const { data: event, error: fetchError } = await supabase
+      .from('events')
+      .select('organizer_id, image_url')
+      .eq('id', eventId)
+      .single();
+
+    if (fetchError || !event) {
+      return res.status(404).json({ error: 'Event not found' });
+    }
+
+    // 2. Ownership Check
+    if (event.organizer_id !== userId) {
+      return res.status(403).json({ error: 'Forbidden: You can only edit your own events' });
+    }
+
+    const { title, description, category, lat, lng, contact_email, contact_phone } = req.body;
+    const file = req.file;
+    let imageUrl = event.image_url; // Default to existing image
+
+    // 3. Process new image if uploaded
+    if (file) {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+      const cleanFileName = file.originalname.replace(/[^a-zA-Z0-9.\-]/g, '_');
+      const fileName = `events/${uniqueSuffix}-${cleanFileName}`;
+
+      const { error: storageError } = await supabase.storage
+        .from('event-images')
+        .upload(fileName, file.buffer, { contentType: file.mimetype });
+
+      if (storageError) throw new Error(`Storage upload failed: ${storageError.message}`);
+
+      const { data: publicUrlData } = supabase.storage
+        .from('event-images')
+        .getPublicUrl(fileName);
+
+      imageUrl = publicUrlData.publicUrl;
+    }
+
+    // Prepare update payload. Only update location if lat/lng are provided
+    const updatePayload: any = {
+      title, description, category, contact_email, contact_phone, image_url: imageUrl
+    };
+    if (lat && lng) {
+      updatePayload.location = `POINT(${lng} ${lat})`;
+    }
+
+    // 4. Update the database
+    const { data: updatedEvent, error: updateError } = await supabase
+      .from('events')
+      .update(updatePayload)
+      .eq('id', eventId)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+
+    res.status(200).json({ success: true, event: updatedEvent });
+  } catch (error: any) {
+    console.error('Update Event Error:', error);
+    res.status(500).json({ error: error.message || 'Failed to update event' });
+  }
+});
+
+// ==========================================
+// 4. POST RSVP
 // ==========================================
 router.post('/rsvp', async (req: Request, res: Response) => {
   try {
-    // TODO: Replace with Clerk auth later
     const userId = req.headers['x-mock-user-id'] as string;
     const { eventId } = req.body;
 
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
     if (!eventId) return res.status(400).json({ error: 'Event ID required' });
 
-    // 1. Insert RSVP
     const { error: rsvpError } = await supabase
       .from('rsvps')
       .insert([{ clerk_user_id: userId, event_id: eventId }]);
 
     if (rsvpError) throw rsvpError;
 
-    // 2. Log Interaction for ML pipeline
     const { error: interactionError } = await supabase
       .from('user_interactions')
       .insert([{
@@ -145,7 +201,7 @@ router.post('/rsvp', async (req: Request, res: Response) => {
 });
 
 // ==========================================
-// 4. GET RECOMMENDATIONS (ML Proxy)
+// 5. GET RECOMMENDATIONS (ML Proxy)
 // ==========================================
 router.get('/recommendations', async (req: Request, res: Response) => {
   try {
@@ -154,7 +210,6 @@ router.get('/recommendations', async (req: Request, res: Response) => {
 
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-    // Proxy request to Flask ML service running locally
     const mlResponse = await fetch(`http://localhost:5000/recommend?user_id=${userId}&lat=${lat}&lng=${lng}`);
     const rankedEventIds = await mlResponse.json(); 
 
@@ -164,7 +219,6 @@ router.get('/recommendations', async (req: Request, res: Response) => {
 
     const ids = rankedEventIds.map((item: any) => item.event_id);
 
-    // Fetch full event details from Supabase
     const { data: eventsData, error } = await supabase
       .from('events')
       .select('*')
@@ -172,7 +226,6 @@ router.get('/recommendations', async (req: Request, res: Response) => {
 
     if (error) throw error;
 
-    // Merge ML reasonings with database rows
     const hydratedFeed = rankedEventIds.map((mlItem: any) => {
       const eventDetails = eventsData.find((e: any) => e.id === mlItem.event_id);
       return { ...eventDetails, ml_reason: mlItem.reason };
