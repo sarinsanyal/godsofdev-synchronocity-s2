@@ -8,11 +8,9 @@ import { useAppTheme } from '../_layout';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// IP configuration mapping back to host server machine
-const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL; // Change to local IP if testing on physical hardware
-const MOCK_USER_ID = 'user-123'; // Matches example mock header
+const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL; 
+const MOCK_USER_ID = 'user-123'; 
 
-// Matches the direct Event Record Shape returned by your backend
 interface DatabaseEvent {
   id: string;
   title: string;
@@ -25,8 +23,8 @@ interface DatabaseEvent {
   contact_phone: string;
   address: string;
   image_url: string;
-  latitude: number; // Decoupled directly
-  longitude: number; // Decoupled directly
+  latitude: number; 
+  longitude: number; 
   created_at: string;
   updated_at: string;
 }
@@ -52,13 +50,12 @@ export default function ExploreScreen() {
   const STREET_LNG_DELTA = 0.06;
 
   const DEFAULT_FALLBACK = {
-    latitude: 22.5726, // Matches your documentation's default Kolkata coordinates
+    latitude: 22.5726, 
     longitude: 88.3639,
     latitudeDelta: STREET_LAT_DELTA,
     longitudeDelta: STREET_LNG_DELTA,
   };
 
-  // 1. Initial Location Query
   useEffect(() => {
     (async () => {
       try {
@@ -79,11 +76,10 @@ export default function ExploreScreen() {
     })();
   }, []);
 
-  // 2. Fetch Events - Updated to remove invalid query parameters
   const fetchAllEvents = async () => {
     try {
       setRefreshing(true);
-      const url = `${BASE_URL}/api/events`; // Clean path matching documentation
+      const url = `${BASE_URL}/api/events`; 
       const response = await fetch(url);
       
       if (!response.ok) {
@@ -105,7 +101,7 @@ export default function ExploreScreen() {
   const getCategoryTheme = (category: string) => {
     switch (category) {
       case 'Gaming': return { color: '#8b5cf6', icon: 'game-controller', bg: isDark ? '#2e1065' : '#f5f3ff', text: isDark ? '#ddd6fe' : '#5b21b6' };
-      case 'Food': return { color: '#f97316', icon: 'pizza', bg: isDark ? '#7c2d12' : '#fff7ed', text: isDark ? '#ffedd5' : '#9a3412' };
+      case 'Food': return { color: '#ef4444', icon: 'pizza', bg: isDark ? '#7c2d12' : '#fff7ed', text: isDark ? '#ffedd5' : '#9a3412' }; 
       case 'Tech': return { color: '#06b6d4', icon: 'code-working', bg: isDark ? '#164e63' : '#ecfeff', text: isDark ? '#cffafe' : '#083344' };
       case 'Art': return { color: '#ec4899', icon: 'color-palette', bg: isDark ? '#831843' : '#fdf2f8', text: isDark ? '#fce7f3' : '#9d174d' };
       case 'Wellness': return { color: '#10b981', icon: 'leaf', bg: isDark ? '#064e3b' : '#ecfdf5', text: isDark ? '#d1fae5' : '#065f46' };
@@ -113,7 +109,6 @@ export default function ExploreScreen() {
     }
   };
 
-  // Safe internal searching mechanism
   const filteredEvents = useMemo(() => {
     if (!searchQuery.trim()) return events;
     return events.filter(event => 
@@ -123,9 +118,13 @@ export default function ExploreScreen() {
     );
   }, [searchQuery, events]);
 
+  const discoverableEvents = useMemo(() => {
+    return filteredEvents.filter(ev => !dislikedEvents.includes(ev.id));
+  }, [filteredEvents, dislikedEvents]);
+
   const panToCoordinates = (lat: number, lng: number, isEventOffset = false) => {
     mapRef.current?.animateToRegion({
-      latitude: isEventOffset ? lat - 0.001 : lat,
+      latitude: isEventOffset ? lat - 0.002 : lat,
       longitude: lng,
       latitudeDelta: STREET_LAT_DELTA,
       longitudeDelta: STREET_LNG_DELTA,
@@ -159,13 +158,11 @@ export default function ExploreScreen() {
   const handleSearchSubmit = () => {
     Keyboard.dismiss();
     setIsSearchFocused(false);
-    const visibleEvents = filteredEvents.filter(ev => !dislikedEvents.includes(ev.id));
-    if (visibleEvents.length > 0) {
-      handleSelectEvent(visibleEvents[0]);
+    if (discoverableEvents.length > 0) {
+      handleSelectEvent(discoverableEvents[0]);
     }
   };
 
-  // 3. Like/RSVP handler using updated POST /api/rsvp spec
   const toggleLikeEvent = async (id: string) => {
     const isAlreadyLiked = likedEvents.includes(id);
     setLikedEvents(prev => 
@@ -174,20 +171,15 @@ export default function ExploreScreen() {
 
     if (!isAlreadyLiked) {
       try {
-        const response = await fetch(`${BASE_URL}/api/rsvp`, { //
-          method: 'POST', //
+        const response = await fetch(`${BASE_URL}/api/rsvp`, { 
+          method: 'POST', 
           headers: {
-            'Content-Type': 'application/json', //
-            'x-mock-user-id': MOCK_USER_ID //
+            'Content-Type': 'application/json', 
+            'x-mock-user-id': MOCK_USER_ID 
           },
-          body: JSON.stringify({ eventId: id }) //
+          body: JSON.stringify({ eventId: id }) 
         });
-        
-        if (!response.ok) {
-          throw new Error('RSVP request failed');
-        }
-        
-        console.log("RSVP confirmed with database successfully.");
+        if (!response.ok) throw new Error('RSVP request failed');
       } catch (err) {
         console.error("Network RSVP error:", err);
       }
@@ -238,14 +230,13 @@ export default function ExploreScreen() {
           Keyboard.dismiss();
         }}
       >
-        {filteredEvents.map((event) => {
+        {events.map((event) => {
           const catTheme = getCategoryTheme(event.category);
           const isActive = selectedEvent?.id === event.id;
           const isDisliked = dislikedEvents.includes(event.id);
           
-          // Safety baseline fallbacks if fields are missing
-          const lat = event.latitude; //
-          const lng = event.longitude; //
+          const lat = event.latitude; 
+          const lng = event.longitude; 
 
           if (!lat || !lng) return null;
 
@@ -258,13 +249,19 @@ export default function ExploreScreen() {
                 handleSelectEvent(event);
               }}
               opacity={isDisliked ? 0.25 : 1.0}
+              centerOffset={{ x: 0, y: -23 }} 
             >
-              <View style={[
-                styles.markerContainer,
-                { backgroundColor: catTheme.color },
-                isActive && [styles.markerActive, { borderColor: colors.textPrimary }]
-              ]}>
-                <Ionicons name={catTheme.icon as any} size={15} color="#ffffff" />
+              <View style={styles.markerWrapper}>
+                <View style={[
+                  styles.pinTeardrop, 
+                  { backgroundColor: catTheme.color },
+                  isActive && [styles.pinActive, { backgroundColor: '#eab308' }]
+                ]}>
+                  <View style={styles.pinInnerIconContainer}>
+                    <Ionicons name={catTheme.icon as any} size={13} color={catTheme.color} />
+                  </View>
+                </View>
+                <View style={[styles.pinShadow, isActive && styles.pinShadowActive]} />
               </View>
             </Marker>
           );
@@ -293,16 +290,16 @@ export default function ExploreScreen() {
           )}
         </View>
 
-        {/* 📋 DROPDOWN PANELS */}
+        {/* 📋 DROPDOWN RESULTS PANELS */}
         {isSearchFocused && searchQuery.trim().length > 0 && (
           <View style={[styles.dropdownPanel, sharedCardStyle]}>
-            {filteredEvents.filter(ev => !dislikedEvents.includes(ev.id)).length === 0 ? (
+            {discoverableEvents.length === 0 ? (
               <View style={styles.noResultsBox}>
                 <Text style={[styles.noResultsText, { color: colors.textMuted }]}>No events matched query</Text>
               </View>
             ) : (
               <FlatList
-                data={filteredEvents.filter(ev => !dislikedEvents.includes(ev.id))}
+                data={discoverableEvents}
                 keyExtractor={(item) => item.id}
                 keyboardShouldPersistTaps="handled"
                 style={{ maxHeight: 240 }}
@@ -335,7 +332,7 @@ export default function ExploreScreen() {
         style={[
           styles.locationButton, 
           sharedCardStyle,
-          { bottom: selectedEvent ? 30 : 110 }
+          { bottom: selectedEvent ? 30 : 40 }
         ]} 
         onPress={snapToCurrentLocation}
         activeOpacity={0.8}
@@ -422,6 +419,16 @@ export default function ExploreScreen() {
                   </TouchableOpacity>
                 </View>
 
+                {/* 🟩 NEW REGISTER FULL WIDTH BUTTON (Matches DiscoverScreen spec) */}
+                <TouchableOpacity
+                  style={[styles.registerButton, isDark && { backgroundColor: '#064e3b', borderColor: '#047857' }]}
+                  activeOpacity={0.8}
+                  onPress={() => alert('Dummy Registration Triggered')}
+                >
+                  <Ionicons name="ticket-outline" size={20} color="#ffffff" />
+                  <Text style={styles.registerButtonText}>Register Now</Text>
+                </TouchableOpacity>
+
               </View>
             </View>
           </View>
@@ -437,23 +444,50 @@ const styles = StyleSheet.create({
   loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loaderText: { marginTop: 12, fontSize: 14, fontWeight: '600' },
   
-  markerContainer: {
-    padding: 9,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: '#ffffff',
+  markerWrapper: {
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 5,
+    width: 50,
+    height: 56,
   },
-  markerActive: {
-    borderWidth: 2.5,
-    transform: [{ scale: 1.3 }],
-    shadowOpacity: 0.3,
+  pinTeardrop: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderBottomRightRadius: 0,
+    transform: [{ rotate: '45deg' }],
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#ffffff',
+  },
+  pinInnerIconContainer: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transform: [{ rotate: '-45deg' }], 
+  },
+  pinActive: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderBottomRightRadius: 0,
+    borderColor: '#ffffff',
+    borderWidth: 2,
+  },
+  pinShadow: {
+    width: 12,
+    height: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    borderRadius: 5,
+    marginTop: 4,
+  },
+  pinShadowActive: {
+    width: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
   },
 
   searchContainer: {
@@ -550,7 +584,7 @@ const styles = StyleSheet.create({
     elevation: 15,
     borderWidth: 1,
   },
-  heroCardImage: { width: '100%', height: SCREEN_HEIGHT * 0.25, backgroundColor: '#e4e4e7' },
+  heroCardImage: { width: '100%', height: SCREEN_HEIGHT * 0.22, backgroundColor: '#e4e4e7' },
   closeCardButton: {
     position: 'absolute',
     top: 16,
@@ -575,12 +609,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 16,
     gap: 12,
   },
   actionButton: {
     flex: 1,
-    height: 48,
+    height: 46,
     borderRadius: 14,
     borderWidth: 1.5,
     flexDirection: 'row',
@@ -599,5 +633,29 @@ const styles = StyleSheet.create({
   actionButtonText: {
     fontSize: 14,
     fontWeight: '700',
+  },
+  /* 🟩 REGISTER BUTTON STYLES */
+  registerButton: {
+    width: '100%',
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#10b981',
+    borderWidth: 1.5,
+    borderColor: '#059669',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 12,
+    gap: 8,
+    shadowColor: '#10b981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  registerButtonText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '800',
   },
 });
