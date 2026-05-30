@@ -7,8 +7,11 @@ dotenv.config();
 
 const app = express();
 
+// Middleware
 app.use(cors());
 app.use(express.json());
+// ADDED: Helps parse standard form data fields that come alongside your image uploads
+app.use(express.urlencoded({ extended: true })); 
 
 // Health check route
 app.get('/health', (req: Request, res: Response) => {
