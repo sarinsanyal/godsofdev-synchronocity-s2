@@ -25,8 +25,8 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: bgColor,
           borderTopWidth: 0,
-          height: 92, // Increased slightly to comfortably hold larger typography
-          paddingBottom: Platform.OS === 'ios' ? 24 : 14,
+          height: 72, // Increased slightly to comfortably hold larger typography
+          paddingBottom: Platform.OS === 'ios' ? 24 : 10,
           paddingTop: 10,
           // Premium Shadow
           shadowColor: '#000',

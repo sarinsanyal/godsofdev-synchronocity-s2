@@ -204,7 +204,7 @@ const styles = StyleSheet.create({
   likeText: { color: '#22c55e', fontSize: 24, fontWeight: '900', letterSpacing: 1.5, textShadowColor: 'rgba(0, 0, 0, 0.5)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
   nopeBadge: { position: 'absolute', top: 35, right: 25, borderWidth: 3, borderColor: '#ef4444', backgroundColor: 'rgba(24, 24, 27, 0.85)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8, transform: [{ rotate: '10deg' }], zIndex: 99 },
   nopeText: { color: '#ef4444', fontSize: 24, fontWeight: '900', letterSpacing: 1.5, textShadowColor: 'rgba(0, 0, 0, 0.5)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
-  actionButtonRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingBottom: 30, gap: 24 },
+  actionButtonRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingBottom: 10, gap: 24 },
   circleButton: { width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2, borderWidth: 1 },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   emptyEmoji: { fontSize: 50, marginBottom: 10 },
