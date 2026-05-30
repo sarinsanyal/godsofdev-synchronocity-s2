@@ -9,7 +9,7 @@ import { useAppTheme } from '../_layout';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // IP configuration mapping back to host server machine
-const BASE_URL = 'http://10.234.101.16:3000'; // Change to local IP if testing on physical hardware
+const BASE_URL = 'http://10.145.59.16:3000'; // Change to local IP if testing on physical hardware
 const MOCK_USER_ID = 'user-123'; // Matches example mock header
 
 // Matches the direct Event Record Shape returned by your backend

@@ -1,12 +1,22 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
+import { DarkTheme, DefaultTheme, ThemeProvider, useTheme } from '@react-navigation/native';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useColorScheme } from 'react-native'; // Native hook to monitor system changes
+import { useColorScheme } from 'react-native'; 
 import 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-// 1. Expand standard React Navigation themes with your custom design tokens
+// === CLERK IMPORTS ===
+import { ClerkProvider, useAuth } from '@clerk/expo';
+import { tokenCache } from '../utils/tokenCache';
+
+const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!;
+
+if (!publishableKey) {
+  throw new Error('Missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY in your .env');
+}
+
+// 1. Expand standard React Navigation themes
 const CustomLightTheme = {
   ...DefaultTheme,
   colors: {
@@ -49,7 +59,7 @@ const CustomDarkTheme = {
   },
 };
 
-// 2. Create a small Context bridge to dispatch the manual toggle event
+// 2. Create Context
 type GlobalThemeContextType = {
   theme: 'light' | 'dark';
   toggleTheme: () => void;
@@ -60,11 +70,33 @@ export const unstable_settings = {
   anchor: '(tabs)',
 };
 
-export default function RootLayout() {
+// ==========================================
+// INNER LAYOUT: Handles Theme + Auth Routing
+// ==========================================
+function InnerLayout() {
   const systemScheme = useColorScheme();
   const [theme, setTheme] = useState<'light' | 'dark'>(systemScheme === 'dark' ? 'dark' : 'light');
 
-  // Sync theme changes if the system preference changes at OS level
+  // --- CLERK ROUTING LOGIC ---
+  const { isLoaded, isSignedIn } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    const inTabsGroup = segments[0] === '(tabs)';
+
+    if (isSignedIn && !inTabsGroup) {
+      // User is signed in but not in the main app, send them to the feed
+      router.replace('/(tabs)');
+    } else if (!isSignedIn && inTabsGroup) {
+      // User is NOT signed in but trying to access the main app, kick them out
+      router.replace('/login');
+    }
+  }, [isSignedIn, isLoaded, segments]);
+  // ---------------------------
+
   useEffect(() => {
     if (systemScheme) setTheme(systemScheme);
   }, [systemScheme]);
@@ -80,10 +112,11 @@ export default function RootLayout() {
       <GlobalThemeContext.Provider value={{ theme, toggleTheme }}>
         <ThemeProvider value={activeNavTheme}>
           <Stack>
+            {/* Added login to your stack so the router can find it */}
+            <Stack.Screen name="login" options={{ headerShown: false, presentation: 'modal' }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
           </Stack>
-          {/* Force status bar elements to dynamically contrast against layout spaces */}
           <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
         </ThemeProvider>
       </GlobalThemeContext.Provider>
@@ -91,13 +124,23 @@ export default function RootLayout() {
   );
 }
 
-// 3. Simple hook exported from root so child components can pull these custom styles
+// ==========================================
+// ROOT LAYOUT: Pure Provider Wrapper
+// ==========================================
+export default function RootLayout() {
+  return (
+    <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
+      <InnerLayout />
+    </ClerkProvider>
+  );
+}
+
+// ==========================================
+// CUSTOM HOOK
+// ==========================================
 export function useAppTheme() {
   const context = useContext(GlobalThemeContext);
-  const navTheme = useColorScheme() === 'dark' ? CustomDarkTheme : CustomLightTheme; 
-  // Pulls contextual color bindings safely from the active React Navigation instance
-  const { useTheme } = require('@react-navigation/native');
-  const currentNavTheme = useTheme();
+  const currentNavTheme = useTheme(); // Cleaner import than inline require
 
   if (!context) {
     throw new Error('useAppTheme must be used under a RootLayout Provider.');

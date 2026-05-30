@@ -3,7 +3,8 @@ import { StyleSheet, View, Text, Dimensions, Image, TouchableOpacity, ScrollView
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MapView, { Region } from 'react-native-maps';
 import { MOCK_EVENTS } from '../../constants/mockData';
-import { useAppTheme } from '../_layout'; // <-- Wire up our global layout theme controller
+import { useAppTheme } from '../_layout'; 
+import { useUser, useAuth } from '@clerk/expo'; // <-- ADDED useAuth
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -33,15 +34,17 @@ const INITIAL_REGION: Region = {
 };
 
 export default function ProfileScreen() {
-  // 1. Consume the master theme tokens
   const { theme, colors } = useAppTheme();
   const isDark = theme === 'dark';
+  
+  // Fetch real user data and auth controls from Clerk
+  const { user } = useUser();
+  const { signOut } = useAuth(); // <-- Pull the signOut method
 
   const [menuVisible, setMenuVisible] = useState(false);
   const [organizeModalVisible, setOrganizeModalVisible] = useState(false);
   const [selectedOwnEvent, setSelectedOwnEvent] = useState<typeof MOCK_OWN_EVENTS_METRICS[0] | null>(null);
   
-  // Form input bindings
   const [eventTitle, setEventTitle] = useState('');
   const [eventSummary, setEventSummary] = useState('');
   const [eventDescription, setEventDescription] = useState('');
@@ -83,9 +86,23 @@ export default function ProfileScreen() {
     setOrganizeModalVisible(false);
   };
 
-  // Sharable theme styling matrices
+  // The actual Log Out execution
+  const handleSignOut = async () => {
+    setMenuVisible(false); // Close the menu if open
+    try {
+      await signOut(); // This deletes the token and triggers _layout.tsx to kick them out!
+    } catch (err) {
+      console.error('Error logging out:', err);
+    }
+  };
+
   const dynamicCardStyle = { backgroundColor: colors.cardBg, borderColor: colors.cardBorder };
   const inputThemeStyle = { backgroundColor: isDark ? '#18181b' : '#fafafa', borderColor: colors.cardBorder, color: colors.textPrimary };
+
+  // DYNAMIC USER DATA VARIABLES
+  const displayAvatar = user?.imageUrl || USER_PROFILE.avatar_url;
+  const displayName = user?.fullName || USER_PROFILE.name;
+  const displayEmail = user?.primaryEmailAddress?.emailAddress || USER_PROFILE.username;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -105,10 +122,14 @@ export default function ProfileScreen() {
         {/* CENTRAL PROFILE HERO */}
         <View style={styles.profileHeroSection}>
           <View style={[styles.avatarOutlineRing, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-            <Image source={{ uri: USER_PROFILE.avatar_url }} style={styles.avatarImage} />
+            {/* CLERK AVATAR */}
+            <Image source={{ uri: displayAvatar }} style={styles.avatarImage} />
           </View>
-          <Text style={[styles.profileName, { color: colors.textPrimary }]}>{USER_PROFILE.name}</Text>
-          <Text style={styles.profileUsername}>{USER_PROFILE.username}</Text>
+          {/* CLERK NAME */}
+          <Text style={[styles.profileName, { color: colors.textPrimary }]}>{displayName}</Text>
+          {/* CLERK EMAIL */}
+          <Text style={styles.profileUsername}>{displayEmail}</Text>
+          
           <Text style={[styles.profileBio, { color: colors.textSecondary }]}>{USER_PROFILE.bio}</Text>
         </View>
 
@@ -203,6 +224,16 @@ export default function ProfileScreen() {
           </ScrollView>
         </View>
 
+        {/* DEDICATED LOG OUT BUTTON ON PAGE */}
+        <TouchableOpacity 
+          style={[styles.mainLogoutButton, { borderColor: colors.cardBorder, backgroundColor: isDark ? '#18181b' : '#fafafa' }]} 
+          activeOpacity={0.7} 
+          onPress={handleSignOut}
+        >
+          <Ionicons name="log-out-outline" size={20} color="#ef4444" />
+          <Text style={styles.mainLogoutText}>Sign Out of Account</Text>
+        </TouchableOpacity>
+
       </ScrollView>
 
       {/* 📊 INTERACTION ANALYTICS SHEET MODAL */}
@@ -260,10 +291,13 @@ export default function ProfileScreen() {
               <Text style={[styles.panelLinkText, { color: colors.textSecondary }]}>Account Settings</Text>
             </TouchableOpacity>
             <View style={[styles.panelDivider, { marginTop: 'auto', backgroundColor: colors.cardBorder }]} />
-            <TouchableOpacity style={[styles.panelRowLink, styles.logoutActionLink]} onPress={() => { setMenuVisible(false); Alert.alert('Logout', 'Session closing.'); }}>
+            
+            {/* LOG OUT FROM MENU WIRED TO CLERK */}
+            <TouchableOpacity style={[styles.panelRowLink, styles.logoutActionLink]} onPress={handleSignOut}>
               <Ionicons name="log-out-outline" size={20} color="#ef4444" />
               <Text style={styles.logoutLinkText}>Log Out</Text>
             </TouchableOpacity>
+            
           </View>
         </TouchableOpacity>
       </Modal>
@@ -320,7 +354,7 @@ export default function ProfileScreen() {
                   initialRegion={INITIAL_REGION}
                   onRegionChangeComplete={handleRegionChangeComplete}
                   showsUserLocation={true}
-                  userInterfaceStyle={theme} // <-- Native Apple/Google map elements turn dark!
+                  userInterfaceStyle={theme}
                 />
                 <View style={styles.fixedPinOverlayContainer} pointerEvents="none">
                   <Ionicons name="location" size={36} color={colors.textPrimary} />
@@ -440,6 +474,24 @@ const styles = StyleSheet.create({
   miniLocationRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
   miniLocationText: { fontSize: 10, fontWeight: '500', flex: 1 },
   insightsSubtext: { fontSize: 11, color: '#8b5cf6', fontWeight: '700', marginTop: 1 },
+
+  // NEW STYLES FOR THE ON-PAGE LOGOUT BUTTON
+  mainLogoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: '6%',
+    marginTop: 36,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 8,
+  },
+  mainLogoutText: {
+    color: '#ef4444',
+    fontSize: 14,
+    fontWeight: '700',
+  },
 
   bottomSheetBackdrop: { flex: 1, backgroundColor: 'rgba(24, 24, 27, 0.4)', justifyContent: 'flex-end' },
   analyticsSheetContainer: {
