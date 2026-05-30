@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { StyleSheet, View, Text, Image, Dimensions, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, View, Text, Image, Dimensions, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
@@ -10,21 +10,55 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { MOCK_EVENTS, DatabaseEvent } from '../../constants/mockData';
-import { useAppTheme } from '../_layout'; // <-- Consuming our master hook cleanly
+import { useAppTheme } from '../_layout'; 
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.45;
 
+// Define the interface based on your database schema
+interface DatabaseEvent {
+  id: string;
+  title: string;
+  description?: string;
+  summary?: string;
+  category?: string;
+  image_url?: string;
+  address?: string;
+  latitude?: number;
+  longitude?: number;
+}
+
 export default function DiscoverScreen() {
-  // 1. Hook straight into your root layout's theme context
   const { theme, colors, toggleTheme } = useAppTheme();
 
-  const [events, setEvents] = useState<DatabaseEvent[]>(MOCK_EVENTS);
+  const [events, setEvents] = useState<DatabaseEvent[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
 
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
+
+  // Fetch events from your API endpoint using the local IP
+  useEffect(() => {
+    const fetchEvents = async () => {
+      try {
+        const BASE_URL = 'http://10.234.101.16:3000';
+        const response = await fetch(`${BASE_URL}/api/events`); 
+        
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+        const data = await response.json();
+        setEvents(data);
+      } catch (error) {
+        console.error('Error fetching events:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchEvents();
+  }, []);
 
   const handleSwipeComplete = (direction: 'left' | 'right') => {
     setCurrentIndex((prev) => prev + 1);
@@ -79,13 +113,12 @@ export default function DiscoverScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.headerSub}>MELA</Text>
-          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Discover What's Live</Text>
+          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Discover What&apos;s Live</Text>
         </View>
         
-        {/* THEME TOGGLE BUTTON LINKED TO MASTER */}
         <TouchableOpacity 
           style={[styles.toggleButton, { backgroundColor: theme === 'light' ? '#fef08a' : '#451a03' }]}
-          onPress={toggleTheme} // <-- Toggles theme globally across the whole app now!
+          onPress={toggleTheme} 
         >
           <Ionicons 
             name={theme === 'light' ? "moon" : "sunny"} 
@@ -96,7 +129,9 @@ export default function DiscoverScreen() {
       </View>
 
       <View style={styles.cardStackContainer}>
-        {hasCardsLeft ? (
+        {isLoading ? (
+          <ActivityIndicator size="large" color="#eab308" />
+        ) : hasCardsLeft ? (
           events
             .map((event, index) => {
               if (index < currentIndex) return null;
@@ -107,12 +142,17 @@ export default function DiscoverScreen() {
 
               const backgroundStyle = stackPosition === 1 ? styles.secondCard : styles.thirdCard;
               const themeCardStyle = { backgroundColor: colors.cardBg, borderColor: colors.cardBorder };
+              
+              // Fallbacks for nullable database columns
+              const imageUrl = event.image_url || 'https://via.placeholder.com/400x300?text=No+Image';
+              const categoryText = event.category ? event.category.toUpperCase() : 'GENERAL';
+              const addressText = event.address || 'Location TBA';
 
               if (isTopCard) {
                 return (
                   <GestureDetector key={event.id} gesture={panGesture}>
                     <Animated.View style={[styles.card, styles.topCard, themeCardStyle, animatedCardStyle]}>
-                      <Image source={{ uri: event.image_url }} style={[styles.cardImage, { backgroundColor: colors.cardBorder }]} />
+                      <Image source={{ uri: imageUrl }} style={[styles.cardImage, { backgroundColor: colors.cardBorder }]} />
 
                       <Animated.View style={[styles.likeBadge, likeOpacity]}>
                         <Text style={styles.likeText}>INTERESTED</Text>
@@ -121,16 +161,17 @@ export default function DiscoverScreen() {
                         <Text style={styles.nopeText}>PASS</Text>
                       </Animated.View>
 
+                      {/* FRONT CARD DETAILS */}
                       <View style={[styles.cardInfoContainer, { backgroundColor: colors.cardBg }]}>
                         <View style={[styles.categoryBadge, { backgroundColor: colors.categoryBg }]}>
-                          <Text style={[styles.categoryText, { color: colors.categoryText }]}>✨ {event.category.toUpperCase()}</Text>
+                          <Text style={[styles.categoryText, { color: colors.categoryText }]}>✨ {categoryText}</Text>
                         </View>
                         <Text style={[styles.eventTitle, { color: colors.textPrimary }]} numberOfLines={1}>{event.title}</Text>
                         <Text style={[styles.summaryText, { color: colors.textSecondary }]}>{event.summary}</Text>
 
                         <View style={styles.metaRow}>
                           <Ionicons name="location-outline" size={16} color={colors.textMuted} />
-                          <Text style={[styles.metaText, { color: colors.textMuted }]} numberOfLines={1}>{event.location.address}</Text>
+                          <Text style={[styles.metaText, { color: colors.textMuted }]} numberOfLines={1}>{addressText}</Text>
                         </View>
                       </View>
                     </Animated.View>
@@ -140,9 +181,20 @@ export default function DiscoverScreen() {
 
               return (
                 <View key={event.id} style={[styles.card, backgroundStyle, themeCardStyle]}>
-                  <Image source={{ uri: event.image_url }} style={[styles.cardImage, { backgroundColor: colors.cardBorder }]} />
+                  <Image source={{ uri: imageUrl }} style={[styles.cardImage, { backgroundColor: colors.cardBorder }]} />
+                  
+                  {/* BACKGROUND CARD DETAILS - Now matching the front card exactly */}
                   <View style={[styles.cardInfoContainer, { backgroundColor: colors.cardBg }]}>
+                    <View style={[styles.categoryBadge, { backgroundColor: colors.categoryBg }]}>
+                      <Text style={[styles.categoryText, { color: colors.categoryText }]}>✨ {categoryText}</Text>
+                    </View>
                     <Text style={[styles.eventTitle, { color: colors.textPrimary }]} numberOfLines={1}>{event.title}</Text>
+                    <Text style={[styles.summaryText, { color: colors.textSecondary }]}>{event.summary}</Text>
+
+                    <View style={styles.metaRow}>
+                      <Ionicons name="location-outline" size={16} color={colors.textMuted} />
+                      <Text style={[styles.metaText, { color: colors.textMuted }]} numberOfLines={1}>{addressText}</Text>
+                    </View>
                   </View>
                 </View>
               );
@@ -157,7 +209,7 @@ export default function DiscoverScreen() {
       </View>
 
       {/* FOOTER BUTTON ACTIONS */}
-      {hasCardsLeft && (
+      {!isLoading && hasCardsLeft && (
         <View style={styles.actionButtonRow}>
           <TouchableOpacity 
             onPress={() => { 
