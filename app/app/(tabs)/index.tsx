@@ -42,7 +42,7 @@ export default function DiscoverScreen() {
   useEffect(() => {
     const fetchEvents = async () => {
       try {
-        const BASE_URL = 'http://10.145.59.16:3000';
+        const BASE_URL = process.env.API_BASE_URL;
         const response = await fetch(`${BASE_URL}/api/events`); 
         
         if (!response.ok) {
