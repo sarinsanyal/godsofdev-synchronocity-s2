@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet, Platform, Text } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { HapticTab } from '@/components/haptic-tab';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -10,7 +10,7 @@ export default function TabLayout() {
   const isDark = colorScheme === 'dark';
 
   // Aesthetic Colors
-  const activeColor = '#eab308'; // That Bumble/Ochre Yellow
+  const activeColor = '#eab308'; // Ochre Yellow
   const inactiveColor = isDark ? '#71717a' : '#a1a1aa';
   const bgColor = isDark ? '#09090b' : '#ffffff';
 
@@ -24,8 +24,8 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: bgColor,
           borderTopWidth: 0,
-          height: 88,
-          paddingBottom: Platform.OS === 'ios' ? 30 : 15,
+          height: 92, // Increased slightly to comfortably hold larger typography
+          paddingBottom: Platform.OS === 'ios' ? 24 : 14,
           paddingTop: 10,
           // Premium Shadow
           shadowColor: '#000',
@@ -34,10 +34,12 @@ export default function TabLayout() {
           shadowRadius: 10,
           elevation: 10,
         },
+        // ⚙️ Enlarged Typography applied globally across tabs
         tabBarLabelStyle: {
-          fontSize: 10,
-          fontWeight: '700',
-          marginTop: 5,
+          fontSize: 13,          // Bumped up for clear scannability
+          fontWeight: '800',     // Thicker aesthetic weight matching the brand identity
+          letterSpacing: -0.2,
+          marginTop: 4,
         },
       }}>
       
@@ -49,14 +51,14 @@ export default function TabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <Ionicons 
               name={focused ? "albums" : "albums-outline"} 
-              size={24} 
+              size={32} // Scaled slightly down to balance larger text ratios
               color={color} 
             />
           ),
         }}
       />
 
-      {/* 2. THE HERO EXPLORE TAB (Middle & Emphasized) */}
+      {/* 2. THE HERO EXPLORE TAB (Middle & Visible Label) */}
       <Tabs.Screen
         name="explore"
         options={{
@@ -65,22 +67,23 @@ export default function TabLayout() {
             <View style={styles.exploreContainer}>
               <View style={[
                 styles.exploreCircle, 
-                { backgroundColor: focused ? '#eab308' : '#18181b' }
+                { 
+                  backgroundColor: focused ? '#eab308' : '#18181b',
+                  borderColor: isDark ? '#09090b' : '#ffffff' // Cutout background adapts dynamically to dark mode
+                }
               ]}>
                 <Feather 
                   name="map" 
-                  size={26} 
-                  color={focused ? '#ffffff' : '#ffffff'} 
+                  size={24} 
+                  color="#ffffff" 
                 />
               </View>
             </View>
           ),
-          // We hide the label for the hero button to keep the UI "Clean"
-          tabBarLabel: () => null,
         }}
       />
 
-      {/* 3. PROFILE & INVENTORY TAB */}
+      {/* 3. PROFILE TAB */}
       <Tabs.Screen
         name="profile"
         options={{
@@ -88,7 +91,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <Ionicons 
               name={focused ? "person-circle" : "person-circle-outline"} 
-              size={28} 
+              size={32} 
               color={color} 
             />
           ),
@@ -102,24 +105,23 @@ const styles = StyleSheet.create({
   exploreContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    // This pushes the icon up out of the bar
-    top: Platform.OS === 'ios' ? -15 : -18, 
-    height: 70,
-    width: 70,
+    // Reduced top offset to allow the "Explore" text string room to clear directly underneath
+    top: Platform.OS === 'ios' ? -10 : -12, 
+    height: 60,
+    width: 60,
   },
   exploreCircle: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     justifyContent: 'center',
     alignItems: 'center',
-    // Intense shadow for the main action button
+    // Intense shadow action
     shadowColor: '#eab308',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-    borderWidth: 4,
-    borderColor: '#ffffff', // Creates a "cutout" look against the bar
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 6,
+    borderWidth: 3.5,
   },
 });
