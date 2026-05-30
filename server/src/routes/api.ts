@@ -2,10 +2,51 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import { supabase } from '../config/supabase';
 
+// Extend the Express Request type to include Clerk's auth object
+interface ClerkRequest extends Request {
+  auth?: { userId?: string };
+}
+
 const router = Router();
 
 // Configure multer for memory storage
 const upload = multer({ storage: multer.memoryStorage() });
+
+// ==========================================
+// 0. POST AUTH SYNC (Creates user in DB after Clerk Login)
+// ==========================================
+router.post('/auth/sync', async (req: ClerkRequest, res: Response) => {
+  try {
+    const userId = req.auth?.userId;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const { name, email } = req.body;
+
+    // Check if user already exists in Supabase
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('id')
+      .eq('clerk_user_id', userId)
+      .single();
+
+    if (!existingUser) {
+      // Create them as a 'normal' user in Supabase
+      const { error } = await supabase.from('users').insert([{
+        clerk_user_id: userId,
+        name: name || 'New User',
+        user_type: 'normal',
+        interests: []
+      }]);
+      
+      if (error) throw error;
+    }
+
+    res.status(200).json({ success: true });
+  } catch (error: any) {
+    console.error('Sync error:', error);
+    res.status(500).json({ error: 'Failed to sync user' });
+  }
+});
 
 // ==========================================
 // 1. GET EVENTS (Map Feed) - PURE DATA
@@ -29,9 +70,10 @@ router.get('/events', async (req: Request, res: Response) => {
 // ==========================================
 // 2. POST EVENT (Any User Creation)
 // ==========================================
-router.post('/events', upload.single('image'), async (req: Request, res: Response) => {
+router.post('/events', upload.single('image'), async (req: ClerkRequest, res: Response) => {
   try {
-    const userId = req.headers['x-mock-user-id'] as string;
+    // Securely extract the user ID from the Clerk token
+    const userId = req.auth?.userId;
 
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized: You must be logged in to create an event' });
@@ -106,9 +148,10 @@ router.post('/events', upload.single('image'), async (req: Request, res: Respons
 // ==========================================
 // 3. PUT EVENT (Update with Ownership Check)
 // ==========================================
-router.put('/events/:eventId', upload.single('image'), async (req: Request, res: Response) => {
+router.put('/events/:eventId', upload.single('image'), async (req: ClerkRequest, res: Response) => {
   try {
-    const userId = req.headers['x-mock-user-id'] as string;
+    // Securely extract the user ID from the Clerk token
+    const userId = req.auth?.userId;
     const { eventId } = req.params;
 
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -201,9 +244,10 @@ router.put('/events/:eventId', upload.single('image'), async (req: Request, res:
 // ==========================================
 // 4. POST RSVP
 // ==========================================
-router.post('/rsvp', async (req: Request, res: Response) => {
+router.post('/rsvp', async (req: ClerkRequest, res: Response) => {
   try {
-    const userId = req.headers['x-mock-user-id'] as string;
+    // Securely extract the user ID from the Clerk token
+    const userId = req.auth?.userId;
     const { eventId } = req.body;
 
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -236,9 +280,10 @@ router.post('/rsvp', async (req: Request, res: Response) => {
 // ==========================================
 // 5. GET RECOMMENDATIONS (ML Proxy)
 // ==========================================
-router.get('/recommendations', async (req: Request, res: Response) => {
+router.get('/recommendations', async (req: ClerkRequest, res: Response) => {
   try {
-    const userId = req.headers['x-mock-user-id'] as string;
+    // Securely extract the user ID from the Clerk token
+    const userId = req.auth?.userId;
     const { lat, lng } = req.query;
 
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
