@@ -66,8 +66,8 @@ export default function DiscoverScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerSub}>DISCOVER</Text>
-          <Text style={styles.headerTitle}>What's Next</Text>
+          <Text style={styles.headerSub}>MELA</Text>
+          <Text style={styles.headerTitle}>Discover What's Live</Text>
         </View>
         <TouchableOpacity style={styles.filterButton}>
           <Ionicons name="options" size={22} color="#eab308" />
@@ -146,8 +146,40 @@ export default function DiscoverScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#ffffff' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingTop: 60, paddingBottom: 16 },
-  headerSub: { fontSize: 11, fontWeight: '900', color: '#eab308', letterSpacing: 2 },
-  headerTitle: { fontSize: 28, fontWeight: '900', color: '#18181b', letterSpacing: -0.5 },
+  // Updated Top Navigation Bar Styles
+  headerBar: {
+    height: 120,          // Height bumped up slightly to elegantly breathe with the stacked titles
+    paddingTop: 50,
+    paddingHorizontal: '6%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f4f4f5',
+  },
+  headerTitleContainer: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  headerSub: {
+    fontSize: 21,
+    fontWeight: '900',
+    color: '#eab308',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#18181b',
+    letterSpacing: -0.5,
+    marginTop: 1,       // Tight padding pairing with the subheadline
+  },
+  hamburgerButton: {
+    padding: 6,
+    alignSelf: 'center',
+  },
   filterButton: { width: 44, height: 44, backgroundColor: '#fef08a', borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
   cardStackContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   card: { position: 'absolute', width: SCREEN_WIDTH * 0.92, height: SCREEN_HEIGHT * 0.58, backgroundColor: '#ffffff', borderRadius: 28, borderWidth: 1, borderColor: '#f4f4f5', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.04, shadowRadius: 12, elevation: 4, overflow: 'hidden' },
@@ -163,10 +195,51 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
   metaText: { fontSize: 13, color: '#71717a', marginLeft: 6, fontWeight: '500' },
   overlayBadge: { position: 'absolute', top: 30, borderWidth: 4, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 14, zIndex: 999 },
-  likeBadge: { left: 25, borderColor: '#eab308', transform: [{ rotate: '-10deg' }] },
-  likeText: { color: '#eab308', fontSize: 22, fontWeight: '900' },
-  nopeBadge: { right: 25, borderColor: '#ef4444', transform: [{ rotate: '10deg' }] },
-  nopeText: { color: '#ef4444', fontSize: 22, fontWeight: '900' },
+  likeBadge: {
+    position: 'absolute', // Ensures overlay locks on top of the image
+    top: 35,
+    left: 25,
+    borderWidth: 3,
+    borderColor: '#22c55e',          // Upgraded to a more vibrant UI green
+    backgroundColor: 'rgba(24, 24, 27, 0.85)', // Dark zinc tint shield that isolates text from photo patterns
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 8,
+    transform: [{ rotate: '-10deg' }],
+    zIndex: 10,
+  },
+  likeText: {
+    color: '#22c55e',
+    fontSize: 24,                    // Slightly larger footprint for better scannability
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)', // Adds micro-contrast directly underneath the text
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
+
+  nopeBadge: {
+    position: 'absolute',
+    top: 35,
+    right: 25,
+    borderWidth: 3,
+    borderColor: '#ef4444',
+    backgroundColor: 'rgba(24, 24, 27, 0.85)', // Dark zinc tint shield
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 8,
+    transform: [{ rotate: '10deg' }],
+    zIndex: 10,
+  },
+  nopeText: {
+    color: '#ef4444',
+    fontSize: 24,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
   actionButtonRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingBottom: 30, gap: 24 },
   circleButton: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#ffffff', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2, borderWidth: 1, borderColor: '#f4f4f5' },
   closeButton: { borderColor: '#fee2e2' },

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, View, Text, Dimensions, Image, TouchableOpacity, ScrollView, Modal, TextInput, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import MapView, { Marker, Region } from 'react-native-maps';
+import MapView, { Region } from 'react-native-maps';
 import { MOCK_EVENTS } from '../../constants/mockData';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -12,13 +12,19 @@ const USER_PROFILE = {
   bio: 'Building experiences & finding the best street food hubs in the city. UI developer by day, tech wizard by night. ☕⚡',
   avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400',
   stats: {
-    hosted: 4,
+    hosted: 3,
     attended: 28,
     saved: 12
   }
 };
 
-// Initial map frame centerpoint (Defaulted to Kolkata coordinates)
+// Simulated interaction metrics mapped from user_interactions database tables
+const MOCK_OWN_EVENTS_METRICS = [
+  { id: 'own-1', title: 'Campus Tech Carnival', category: 'Tech', image_url: 'https://images.unsplash.com/photo-1511578314322-379afb476865?w=500', rsvps: 42, saves: 89, removes: 3, address: 'Main Auditorium Ground' },
+  { id: 'own-2', title: 'BGMI LAN Showdown', category: 'Gaming', image_url: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=500', rsvps: 124, saves: 210, removes: 14, address: 'Student Activity Center' },
+  { id: 'own-3', title: 'Street Food Street Walk', category: 'Food', image_url: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=500', rsvps: 19, saves: 34, removes: 1, address: 'Backgate Food Street Alley' },
+];
+
 const INITIAL_REGION: Region = {
   latitude: 22.5726,
   longitude: 88.3639,
@@ -29,8 +35,9 @@ const INITIAL_REGION: Region = {
 export default function ProfileScreen() {
   const [menuVisible, setMenuVisible] = useState(false);
   const [organizeModalVisible, setOrganizeModalVisible] = useState(false);
+  const [selectedOwnEvent, setSelectedOwnEvent] = useState<typeof MOCK_OWN_EVENTS_METRICS[0] | null>(null);
   
-  // Core Database Schema Matching States
+  // Form input bindings
   const [eventTitle, setEventTitle] = useState('');
   const [eventSummary, setEventSummary] = useState('');
   const [eventDescription, setEventDescription] = useState('');
@@ -38,12 +45,8 @@ export default function ProfileScreen() {
   const [eventTags, setEventTags] = useState('');
   const [eventEmail, setEventEmail] = useState('');
   const [eventPhone, setEventPhone] = useState('');
-  
-  // Timing States
   const [eventDate, setEventDate] = useState('');
   const [eventTime, setEventTime] = useState('');
-
-  // Composite Location States (Map tracking replaces manual coordinate text inputs)
   const [address, setAddress] = useState('');
   const [targetLocation, setTargetLocation] = useState({
     latitude: INITIAL_REGION.latitude,
@@ -63,12 +66,8 @@ export default function ProfileScreen() {
 
   const likedEventsSample = MOCK_EVENTS.slice(0, 4);
 
-  // Update internal location states when user finishes sliding/panning the map
   const handleRegionChangeComplete = (region: Region) => {
-    setTargetLocation({
-      latitude: region.latitude,
-      longitude: region.longitude
-    });
+    setTargetLocation({ latitude: region.latitude, longitude: region.longitude });
   };
 
   const handleCreateEventSubmit = () => {
@@ -76,51 +75,18 @@ export default function ProfileScreen() {
       Alert.alert('Missing Fields', 'Please supply an event headline and written structural address.');
       return;
     }
-
-    const formattedTags = eventTags.split(',').map(tag => tag.trim()).filter(Boolean);
-
-    // Final consolidated schema structure ready to save straight to Supabase/Postgres
-    const databasePayload = {
-      title: eventTitle,
-      summary: eventSummary,
-      description: eventDescription,
-      category: eventCategory,
-      tags: formattedTags,
-      date: eventDate,
-      time: eventTime,
-      contact_email: eventEmail,
-      contact_phone: eventPhone,
-      location: {
-        address: address,
-        latitude: targetLocation.latitude,
-        longitude: targetLocation.longitude
-      }
-    };
-
-    console.log('Database transmission initiated payload:', databasePayload);
     Alert.alert('Success!', 'Your event coordinate vector mapping data has been processed.');
-    
-    // Reset fields cleanly
-    setEventTitle('');
-    setEventSummary('');
-    setEventDescription('');
-    setEventCategory('');
-    setEventTags('');
-    setEventEmail('');
-    setEventPhone('');
-    setEventDate('');
-    setEventTime('');
-    setAddress('');
-    setTargetLocation({ latitude: INITIAL_REGION.latitude, longitude: INITIAL_REGION.longitude });
     setOrganizeModalVisible(false);
   };
 
   return (
     <View style={styles.container}>
       
-      {/* HEADER TOP BAR */}
+      {/* 📋 BRANDED FESTIVAL HEADER TOP BAR CONTAINER */}
       <View style={styles.headerBar}>
-        <Text style={styles.headerTitle}>Profile</Text>
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle}>Your Profile</Text>
+        </View>
         <TouchableOpacity style={styles.hamburgerButton} onPress={() => setMenuVisible(true)} activeOpacity={0.7}>
           <Ionicons name="menu" size={26} color="#18181b" />
         </TouchableOpacity>
@@ -156,7 +122,7 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* ORGANIZE EVENT BANNER */}
+        {/* 🪄 PROMINENT "ORGANIZE YOUR EVENT" ACTION BANNER */}
         <TouchableOpacity style={styles.organizeBannerButton} activeOpacity={0.9} onPress={() => setOrganizeModalVisible(true)}>
           <View style={styles.bannerLeftInfo}>
             <View style={styles.bannerIconBox}>
@@ -170,8 +136,40 @@ export default function ProfileScreen() {
           <Ionicons name="arrow-forward-circle" size={28} color="#18181b" />
         </TouchableOpacity>
 
+        {/* ⚡ YOUR EVENTS (HOSTED MANAGEMENT CAROUSEL) */}
+        <View style={styles.sectionSectionWrapper}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionHeadingText}>Your Events</Text>
+            <Text style={styles.viewAllTextLink}>Tap for Engagement Insights</Text>
+          </View>
+
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.likedHorizontalScroll}>
+            {MOCK_OWN_EVENTS_METRICS.map((event) => {
+              const themeColor = getCategoryColor(event.category);
+              return (
+                <TouchableOpacity 
+                  key={event.id} 
+                  style={styles.eventMiniCard}
+                  activeOpacity={0.85}
+                  onPress={() => setSelectedOwnEvent(event)}
+                >
+                  <Image source={{ uri: event.image_url }} style={styles.eventMiniCardImage} />
+                  <View style={[styles.miniCategoryIndicator, { backgroundColor: themeColor }]} />
+                  <View style={styles.miniCardTextContent}>
+                    <Text style={styles.miniEventTitle} numberOfLines={1}>{event.title}</Text>
+                    <View style={styles.miniLocationRow}>
+                      <Ionicons name="people" size={12} color="#8b5cf6" />
+                      <Text style={styles.insightsSubtext}>{event.rsvps} active RSVPs</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+
         {/* HORIZONTAL LIKED EVENTS LIST */}
-        <View style={styles.likedSectionWrapper}>
+        <View style={styles.sectionSectionWrapper}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionHeadingText}>Liked Events</Text>
             <TouchableOpacity><Text style={styles.viewAllTextLink}>See All</Text></TouchableOpacity>
@@ -199,6 +197,45 @@ export default function ProfileScreen() {
 
       </ScrollView>
 
+      {/* 📊 INTERACTION ANALYTICS SHEET MODAL */}
+      <Modal visible={!!selectedOwnEvent} transparent={true} animationType="fade" onRequestClose={() => setSelectedOwnEvent(null)}>
+        <TouchableOpacity style={styles.bottomSheetBackdrop} activeOpacity={1} onPress={() => setSelectedOwnEvent(null)}>
+          <View style={styles.analyticsSheetContainer}>
+            <View style={styles.sheetHeaderIndicator} />
+            {selectedOwnEvent && (
+              <View>
+                <Text style={styles.sheetSubheading}>EVENT INSIGHTS</Text>
+                <Text style={styles.sheetTitleText}>{selectedOwnEvent.title}</Text>
+                
+                <View style={styles.analyticsStatsGrid}>
+                  <View style={[styles.analyticCard, { borderColor: '#10b981' }]}>
+                    <Ionicons name="checkmark-circle-outline" size={22} color="#10b981" />
+                    <Text style={styles.analyticValue}>{selectedOwnEvent.rsvps}</Text>
+                    <Text style={styles.analyticLabel}>Going (RSVP)</Text>
+                  </View>
+                  
+                  <View style={[styles.analyticCard, { borderColor: '#3b82f6' }]}>
+                    <Ionicons name="bookmark-outline" size={22} color="#3b82f6" />
+                    <Text style={styles.analyticValue}>{selectedOwnEvent.saves}</Text>
+                    <Text style={styles.analyticLabel}>Interested / Saved</Text>
+                  </View>
+                  
+                  <View style={[styles.analyticCard, { borderColor: '#ef4444' }]}>
+                    <Ionicons name="close-circle-outline" size={22} color="#ef4444" />
+                    <Text style={styles.analyticValue}>{selectedOwnEvent.removes}</Text>
+                    <Text style={styles.analyticLabel}>Removed / Hidden</Text>
+                  </View>
+                </View>
+
+                <TouchableOpacity style={styles.closeSheetButton} onPress={() => setSelectedOwnEvent(null)}>
+                  <Text style={styles.closeSheetButtonText}>Dismiss Panel</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* HAMBURGER SIDE MODAL PANEL */}
       <Modal visible={menuVisible} transparent={true} animationType="fade" onRequestClose={() => setMenuVisible(false)}>
         <TouchableOpacity style={styles.menuOverlayBackground} activeOpacity={1} onPress={() => setMenuVisible(false)}>
@@ -209,22 +246,13 @@ export default function ProfileScreen() {
                 <Ionicons name="close" size={24} color="#18181b" />
               </TouchableOpacity>
             </View>
-            
             <View style={styles.panelDivider} />
-
-            <TouchableOpacity style={styles.panelRowLink} onPress={() => { setMenuVisible(false); Alert.alert('Settings', 'Account interface router placeholder.'); }}>
+            <TouchableOpacity style={styles.panelRowLink} onPress={() => { setMenuVisible(false); Alert.alert('Settings', 'Account interface router.'); }}>
               <Ionicons name="settings-outline" size={20} color="#4b5563" />
               <Text style={styles.panelLinkText}>Account Settings</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity style={styles.panelRowLink} onPress={() => { setMenuVisible(false); Alert.alert('Privacy', 'Security parameters matrix overlay.'); }}>
-              <Ionicons name="shield-checkmark-outline" size={20} color="#4b5563" />
-              <Text style={styles.panelLinkText}>Privacy & Security</Text>
-            </TouchableOpacity>
-
             <View style={[styles.panelDivider, { marginTop: 'auto' }]} />
-
-            <TouchableOpacity style={[styles.panelRowLink, styles.logoutActionLink]} onPress={() => { setMenuVisible(false); Alert.alert('Logout', 'Cleaning session authorization token tokens...'); }}>
+            <TouchableOpacity style={[styles.panelRowLink, styles.logoutActionLink]} onPress={() => { setMenuVisible(false); Alert.alert('Logout', 'Session closing.'); }}>
               <Ionicons name="log-out-outline" size={20} color="#ef4444" />
               <Text style={styles.logoutLinkText}>Log Out</Text>
             </TouchableOpacity>
@@ -232,7 +260,7 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </Modal>
 
-      {/* 🏗️ HOST AN EVENT MODAL WITH INTERACTIVE MAP SELECTOR */}
+      {/* HOST AN EVENT MODAL */}
       <Modal visible={organizeModalVisible} animationType="slide" transparent={true} onRequestClose={() => setOrganizeModalVisible(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalKeyboardAvoidingContainer}>
           <View style={styles.organizeModalWindow}>
@@ -244,7 +272,6 @@ export default function ProfileScreen() {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} style={styles.organizeFormScroll} contentContainerStyle={styles.modalFormContentStyle}>
-              
               <Text style={styles.inputLabelText}>EVENT TITLE</Text>
               <TextInput style={styles.formInputBox} placeholder="e.g., Rooftop Jazz Mix" placeholderTextColor="#a1a1aa" value={eventTitle} onChangeText={setEventTitle} />
 
@@ -276,7 +303,6 @@ export default function ProfileScreen() {
                 </View>
               </View>
 
-              {/* 🗺️ INTERACTIVE MAP POSITION PINNER SECTION */}
               <Text style={styles.inputLabelText}>PINPOINT EVENT LOCATION</Text>
               <Text style={styles.inputSubhintText}>Drag and scroll map to align the focal marker at the venue point</Text>
               
@@ -287,17 +313,10 @@ export default function ProfileScreen() {
                   onRegionChangeComplete={handleRegionChangeComplete}
                   showsUserLocation={true}
                 />
-                {/* Fixed center target anchor mimicking real-world delivery application behaviors */}
                 <View style={styles.fixedPinOverlayContainer} pointerEvents="none">
                   <Ionicons name="location" size={36} color="#18181b" />
                   <View style={styles.pinShadowDot} />
                 </View>
-              </View>
-
-              {/* Coordinates readouts for direct real-time dynamic visibility validation */}
-              <View style={styles.coordinateIndicatorRow}>
-                <Text style={styles.coordinateItemText}>Lat: {targetLocation.latitude.toFixed(5)}</Text>
-                <Text style={styles.coordinateItemText}>Long: {targetLocation.longitude.toFixed(5)}</Text>
               </View>
 
               <Text style={styles.inputLabelText}>WRITTEN VENUE ADDRESS</Text>
@@ -325,8 +344,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#ffffff' },
   scrollContent: { paddingBottom: 40 },
   
+  // Header styles updated for the elegant Mela aesthetic stacking layout
   headerBar: {
-    height: 100,
+    height: 120,
     paddingTop: 50,
     paddingHorizontal: '6%',
     flexDirection: 'row',
@@ -336,8 +356,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#f4f4f5',
   },
-  headerTitle: { fontSize: 24, fontWeight: '900', color: '#18181b', letterSpacing: -0.5, flex: 1 },
-  hamburgerButton: { padding: 4 },
+  headerTitleContainer: { flex: 1, justifyContent: 'center' },
+  headerSub: { fontSize: 11, fontWeight: '900', color: '#eab308', letterSpacing: 2, textTransform: 'uppercase' },
+  headerTitle: { fontSize: 28, fontWeight: '900', color: '#18181b', letterSpacing: -0.5, marginTop: 1 },
+  hamburgerButton: { padding: 6, alignSelf: 'center' },
 
   profileHeroSection: { alignItems: 'center', marginTop: 24, paddingHorizontal: '8%' },
   avatarOutlineRing: {
@@ -403,7 +425,7 @@ const styles = StyleSheet.create({
   bannerMainText: { fontSize: 14, fontWeight: '800', color: '#18181b' },
   bannerSubText: { fontSize: 11, fontWeight: '500', color: '#71717a', marginTop: 1 },
 
-  likedSectionWrapper: { marginTop: 32 },
+  sectionSectionWrapper: { marginTop: 32 },
   sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: '6%', marginBottom: 14 },
   sectionHeadingText: { fontSize: 16, fontWeight: '900', color: '#18181b', letterSpacing: -0.3 },
   viewAllTextLink: { fontSize: 12, fontWeight: '700', color: '#71717a' },
@@ -422,6 +444,45 @@ const styles = StyleSheet.create({
   miniEventTitle: { fontSize: 13, fontWeight: '800', color: '#18181b' },
   miniLocationRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
   miniLocationText: { fontSize: 10, color: '#71717a', fontWeight: '500', flex: 1 },
+  insightsSubtext: { fontSize: 11, color: '#8b5cf6', fontWeight: '700', marginTop: 1 },
+
+  // Bottom Analytics Sheet Mechanics
+  bottomSheetBackdrop: { flex: 1, backgroundColor: 'rgba(24, 24, 27, 0.4)', justifyContent: 'flex-end' },
+  analyticsSheetContainer: {
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    padding: 24,
+    paddingBottom: Platform.OS === 'ios' ? 44 : 28,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  sheetHeaderIndicator: { width: 38, height: 4, backgroundColor: '#e4e4e7', borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
+  sheetSubheading: { fontSize: 10, fontWeight: '900', color: '#a1a1aa', letterSpacing: 1.5, marginBottom: 4 },
+  sheetTitleText: { fontSize: 20, fontWeight: '900', color: '#18181b', marginBottom: 24 },
+  analyticsStatsGrid: { gap: 12, marginBottom: 12 },
+  analyticCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    backgroundColor: '#fafafa',
+  },
+  analyticValue: { fontSize: 20, fontWeight: '900', color: '#18181b', marginLeft: 12, marginRight: 6 },
+  analyticLabel: { fontSize: 13, fontWeight: '600', color: '#52525b' },
+  closeSheetButton: {
+    backgroundColor: '#18181b',
+    height: 48,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  closeSheetButtonText: { color: '#ffffff', fontSize: 13, fontWeight: '700' },
 
   menuOverlayBackground: { flex: 1, backgroundColor: 'rgba(24, 24, 27, 0.3)', justifyContent: 'flex-end', flexDirection: 'row' },
   hamburgerSidePanel: { width: SCREEN_WIDTH * 0.72, height: '100%', backgroundColor: '#ffffff', paddingHorizontal: 24, paddingBottom: 40 },
@@ -433,7 +494,6 @@ const styles = StyleSheet.create({
   logoutActionLink: { marginTop: 'auto' },
   logoutLinkText: { fontSize: 14, fontWeight: '700', color: '#ef4444' },
 
-  // Expandable form architecture
   modalKeyboardAvoidingContainer: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(24, 24, 27, 0.4)' },
   organizeModalWindow: {
     backgroundColor: '#ffffff',
@@ -460,16 +520,10 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     backgroundColor: '#fafafa',
   },
-  multilineInputBox: {
-    height: 76,
-    paddingTop: 12,
-    paddingBottom: 12,
-    textAlignVertical: 'top'
-  },
+  multilineInputBox: { height: 76, paddingTop: 12, paddingBottom: 12, textAlignVertical: 'top' },
   formGridRow: { flexDirection: 'row', gap: 12 },
   gridColumnItem: { flex: 1 },
 
-  // Map elements layout specs
   mapContainerFrame: {
     height: 180,
     width: '100%',
@@ -490,25 +544,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pinShadowDot: {
-    width: 6,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    marginTop: -2,
-  },
-  coordinateIndicatorRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 4,
-    marginTop: 6,
-  },
-  coordinateItemText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#71717a',
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-  },
+  pinShadowDot: { width: 6, height: 3, borderRadius: 2, backgroundColor: 'rgba(0,0,0,0.3)', marginTop: -2 },
+  coordinateIndicatorRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4, marginTop: 6 },
+  coordinateItemText: { fontSize: 11, fontWeight: '700', color: '#71717a', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
 
   submitEventFormButton: {
     backgroundColor: '#18181b',
