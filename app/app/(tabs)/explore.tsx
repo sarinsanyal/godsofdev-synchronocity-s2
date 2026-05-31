@@ -5,7 +5,7 @@ import * as Location from 'expo-location';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import { useAppTheme } from '../_layout';
-import { useAuth } from '@clerk/expo'; // 👈 Added for authentic Clerk token management
+import { useAuth } from '@clerk/expo'; 
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -32,7 +32,7 @@ interface DatabaseEvent {
 export default function ExploreScreen() {
   const { theme, colors } = useAppTheme();
   const isDark = theme === 'dark';
-  const { getToken } = useAuth(); // 👈 Hook to fetch your current user's valid session JWT token
+  const { getToken } = useAuth(); 
 
   const mapRef = useRef<MapView | null>(null);
   const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
@@ -43,10 +43,10 @@ export default function ExploreScreen() {
   const [isSearchFocused, setIsSearchFocused] = useState<boolean>(false);
   const [selectedEvent, setSelectedEvent] = useState<DatabaseEvent | null>(null);
 
-  // Interaction States synced with your database schemas
+  // Interaction States 
   const [likedEvents, setLikedEvents] = useState<string[]>([]);
   const [dislikedEvents, setDislikedEvents] = useState<string[]>([]);
-  const [rsvpedEvents, setRsvpedEvents] = useState<string[]>([]); // 👈 Array to track explicit RSVPs locally
+  const [rsvpedEvents, setRsvpedEvents] = useState<string[]>([]); 
 
   const STREET_LAT_DELTA = 0.06;
   const STREET_LNG_DELTA = 0.06;
@@ -58,25 +58,20 @@ export default function ExploreScreen() {
     longitudeDelta: STREET_LNG_DELTA,
   };
 
-  useEffect(() => {
-    (async () => {
-      try {
-        let { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          fetchAllEvents();
-          return;
-        }
-        let currentLoc = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
-        setUserLocation(currentLoc);
-        fetchAllEvents();
-      } catch (error) {
-        console.error("Error setting up starting position:", error);
-        fetchAllEvents();
+  const fetchUserRegistrations = async () => {
+    try {
+      const token = await getToken();
+      const response = await fetch(`${BASE_URL}/api/events/rsvp`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setRsvpedEvents(data.map((event: DatabaseEvent) => event.id));
       }
-    })();
-  }, []);
+    } catch (err) {
+      console.error("Failed to sync initial RSVP states:", err);
+    }
+  };
 
   const fetchAllEvents = async () => {
     try {
@@ -99,6 +94,32 @@ export default function ExploreScreen() {
       setRefreshing(false);
     }
   };
+
+  // 👈 NEW: Combined Manual Refresh Handler
+  const handleManualRefresh = async () => {
+    await fetchAllEvents();
+    await fetchUserRegistrations();
+  };
+
+  useEffect(() => {
+    (async () => {
+      try {
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          handleManualRefresh();
+          return;
+        }
+        let currentLoc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        setUserLocation(currentLoc);
+        handleManualRefresh();
+      } catch (error) {
+        console.error("Error setting up starting position:", error);
+        handleManualRefresh();
+      }
+    })();
+  }, []);
 
   const getCategoryTheme = (category: string) => {
     switch (category) {
@@ -165,7 +186,6 @@ export default function ExploreScreen() {
     }
   };
 
-  // 👈 Updates /interactions endpoint with safe optimistic rollbacks
   const toggleLikeEvent = async (id: string) => {
     const isAlreadyLiked = likedEvents.includes(id);
     
@@ -184,19 +204,17 @@ export default function ExploreScreen() {
         },
         body: JSON.stringify({ 
           eventId: id,
-          interactionType: isAlreadyLiked ? 'reject' : 'like' // Inverting state securely
+          interactionType: isAlreadyLiked ? 'reject' : 'like' 
         }) 
       });
       if (!response.ok) throw new Error('Interaction update rejected by server.');
     } catch (err) {
       console.error("Network Like error:", err);
-      // Rollback UI to previous state on network crash
       setLikedEvents(prev => isAlreadyLiked ? [...prev, id] : prev.filter(item => item !== id));
       Alert.alert("Connection Failure", "Could not sync interaction profile data.");
     }
   };
 
-  // 👈 Connects directly to /interactions with 'reject' payload
   const toggleDislikeEvent = async (id: string) => {
     setDislikedEvents(prev => [...prev, id]);
     setLikedEvents(prev => prev.filter(item => item !== id));
@@ -222,7 +240,6 @@ export default function ExploreScreen() {
     }
   };
 
-  // 👈 Explicit handle wrapper for the main "Register Now" /api/rsvp endpoint
   const handleRegisterEvent = async (id: string) => {
     if (rsvpedEvents.includes(id)) {
       Alert.alert("Notice", "You are already officially on the attendance record for this event.");
@@ -324,7 +341,6 @@ export default function ExploreScreen() {
         })}
       </MapView>
 
-      {/* SEARCH CONTAINER */}
       <View style={styles.searchContainer}>
         <View style={[styles.searchBarWrapper, sharedCardStyle]}>
           <Ionicons name="search" size={20} color={colors.textMuted} style={styles.searchIcon} />
@@ -346,7 +362,6 @@ export default function ExploreScreen() {
           )}
         </View>
 
-        {/* DROPDOWN RESULTS PANELS */}
         {isSearchFocused && searchQuery.trim().length > 0 && (
           <View style={[styles.dropdownPanel, sharedCardStyle]}>
             {discoverableEvents.length === 0 ? (
@@ -383,7 +398,20 @@ export default function ExploreScreen() {
         )}
       </View>
 
-      {/* TARGET TRACKING FLOATER */}
+      {/* 🔄 REFRESH DATA BUTTON */}
+      <TouchableOpacity 
+        style={[
+          styles.refreshButton, 
+          sharedCardStyle,
+          { bottom: selectedEvent ? 100 : 110 }
+        ]} 
+        onPress={handleManualRefresh}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="refresh" size={24} color={colors.textPrimary} />
+      </TouchableOpacity>
+
+      {/* 📍 CURRENT LOCATION BUTTON */}
       <TouchableOpacity 
         style={[
           styles.locationButton, 
@@ -400,11 +428,10 @@ export default function ExploreScreen() {
         )}
       </TouchableOpacity>
 
-      {/* DETAILED MODAL HERO CARD */}
       {selectedEvent && (() => {
         const catTheme = getCategoryTheme(selectedEvent.category);
         const isLiked = likedEvents.includes(selectedEvent.id);
-        const isRegistered = rsvpedEvents.includes(selectedEvent.id); // Read live registration tracker status
+        const isRegistered = rsvpedEvents.includes(selectedEvent.id); 
 
         return (
           <View style={styles.modalBlurOverlay}>
@@ -444,7 +471,6 @@ export default function ExploreScreen() {
                   <Text style={[styles.metaText, { color: colors.textSecondary }]} numberOfLines={1}>{selectedEvent.contact_email}</Text>
                 </View>
 
-                {/* INTERACTIONS BAR */}
                 <View style={styles.actionButtonRow}>
                   <TouchableOpacity
                     style={[styles.actionButton, styles.dislikeButton, isDark && { backgroundColor: '#451a1a', borderColor: '#7f1d1d' }]}
@@ -476,7 +502,6 @@ export default function ExploreScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {/* CONNECTED REGISTER FULL WIDTH BUTTON */}
                 <TouchableOpacity
                   style={[
                     styles.registerButton, 
@@ -484,7 +509,7 @@ export default function ExploreScreen() {
                     isRegistered && { backgroundColor: '#047857', opacity: 0.75, borderColor: '#064e3b' }
                   ]}
                   activeOpacity={0.8}
-                  disabled={isRegistered} // Lock button if process was already completed
+                  disabled={isRegistered} 
                   onPress={() => handleRegisterEvent(selectedEvent.id)}
                 >
                   <Ionicons 
@@ -616,6 +641,22 @@ const styles = StyleSheet.create({
   noResultsText: { fontSize: 13, fontWeight: '500' },
 
   locationButton: {
+    position: 'absolute',
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 6,
+    borderWidth: 1,
+    zIndex: 999,
+  },
+  refreshButton: {
     position: 'absolute',
     right: 20,
     width: 56,

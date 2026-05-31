@@ -5,6 +5,7 @@ import MapView, { Region } from 'react-native-maps';
 import { useAppTheme } from '../_layout'; 
 import { useUser, useAuth } from '@clerk/expo';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as ImagePicker from 'expo-image-picker'; // 👈 Added for image uploads
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -36,10 +37,11 @@ export default function ProfileScreen() {
   // --- DATA FETCHING STATE ---
   const [hostedEvents, setHostedEvents] = useState<any[]>([]);
   const [likedEvents, setLikedEvents] = useState<any[]>([]);
-  const [rsvpedEvents, setRsvpedEvents] = useState<any[]>([]); // 👈 Added state hook for active RSVPs
+  const [rsvpedEvents, setRsvpedEvents] = useState<any[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
 
   // --- FORM STATE ---
+  const [imageUri, setImageUri] = useState<string | null>(null); // 👈 Added state for cover image
   const [eventTitle, setEventTitle] = useState('');
   const [eventSummary, setEventSummary] = useState('');
   const [eventDescription, setEventDescription] = useState('');
@@ -90,7 +92,7 @@ export default function ProfileScreen() {
         console.error("🚨 Error syncing liked components:", err);
       }
 
-      // 3. Fetch Registered/RSVPed Events 👈 Added direct API synchronization pass
+      // 3. Fetch Registered/RSVPed Events
       try {
         const rsvpRes = await fetch(`${BASE_URL}/api/events/rsvp`, { headers });
         if (rsvpRes.ok) {
@@ -112,6 +114,26 @@ export default function ProfileScreen() {
     fetchProfileData();
   }, [user?.id]);
 
+  // --- IMAGE PICKER HANDLER ---
+  const pickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Denied', 'We need camera roll permissions to upload an image.');
+      return;
+    }
+
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [16, 9], 
+      quality: 0.7, 
+    });
+
+    if (!result.canceled) {
+      setImageUri(result.assets[0].uri);
+    }
+  };
+
   // --- CREATE EVENT SUBMISSION TO EXPRESS BACKEND ---
   const handleCreateEventSubmit = async () => {
     if (!eventTitle || !address || !user?.id) {
@@ -123,25 +145,48 @@ export default function ProfileScreen() {
       const token = await getToken();
       const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL; 
 
+      // 🚨 Using FormData instead of JSON.stringify to handle image uploads
+      const formData = new FormData();
+      formData.append('title', eventTitle);
+      formData.append('summary', eventSummary);
+      formData.append('description', eventDescription);
+      formData.append('category', eventCategory);
+      
+      // Map string values for FormData
+      const tagsArray = eventTags ? eventTags.split(',').map(t => t.trim()) : [];
+      formData.append('tags', JSON.stringify(tagsArray));
+      
+      // 🚨 FIX: Using lat and lng exactly as the backend expects
+      formData.append('lat', String(targetLocation.latitude));
+      formData.append('lng', String(targetLocation.longitude));
+      
+      formData.append('address', address);
+      formData.append('contact_email', eventEmail);
+      formData.append('contact_phone', eventPhone);
+
+      // Append image if selected, otherwise fallback
+      if (imageUri) {
+        const filename = imageUri.split('/').pop() || 'upload.jpg';
+        const match = /\.(\w+)$/.exec(filename);
+        const type = match ? `image/${match[1]}` : `image/jpeg`;
+
+        formData.append('image', {
+          uri: imageUri,
+          name: filename,
+          type: type,
+        } as any);
+      } else {
+        formData.append('image_url', USER_PROFILE.fallback_image);
+      }
+
       const response = await fetch(`${BASE_URL}/api/events`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          // 🚨 Note: DO NOT set 'Content-Type' when sending FormData in React Native.
+          // fetch will automatically set it to 'multipart/form-data' with the correct boundary!
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          title: eventTitle,
-          summary: eventSummary,
-          description: eventDescription,
-          category: eventCategory,
-          tags: eventTags ? eventTags.split(',').map(t => t.trim()) : [],
-          latitude: targetLocation.latitude,
-          longitude: targetLocation.longitude,
-          address: address,
-          contact_email: eventEmail,
-          contact_phone: eventPhone,
-          image_url: USER_PROFILE.fallback_image
-        }),
+        body: formData,
       });
 
       const responseData = await response.json();
@@ -150,6 +195,8 @@ export default function ProfileScreen() {
       Alert.alert('Success! 🎉', 'Your custom community coordinate event mapping vector has been created.');
       setOrganizeModalVisible(false);
       
+      // Clear all fields
+      setImageUri(null);
       setEventTitle(''); setEventSummary(''); setEventDescription('');
       setEventCategory(''); setEventTags(''); setAddress('');
       setEventEmail(''); setEventPhone('');
@@ -229,7 +276,6 @@ export default function ProfileScreen() {
           </View>
           <View style={[styles.statDivider, { backgroundColor: colors.cardBorder }]} />
           <View style={styles.statSegment}>
-            {/* Live Counter Sync */}
             <Text style={[styles.statValue, { color: colors.textPrimary }]}>{rsvpedEvents.length}</Text> 
             <Text style={[styles.statLabel, { color: colors.textMuted }]}>Registered</Text>
           </View>
@@ -438,6 +484,26 @@ export default function ProfileScreen() {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} style={styles.organizeFormScroll} contentContainerStyle={styles.modalFormContentStyle}>
+              
+              {/* 🚨 ADDED IMAGE UPLOAD FIELD HERE */}
+              <Text style={[styles.inputLabelText, { color: colors.textMuted }]}>EVENT COVER IMAGE</Text>
+              <TouchableOpacity 
+                style={[styles.imagePickerBox, { borderColor: colors.cardBorder, backgroundColor: isDark ? '#18181b' : '#fafafa' }]} 
+                onPress={pickImage}
+                activeOpacity={0.8}
+              >
+                {imageUri ? (
+                  <Image source={{ uri: imageUri }} style={styles.previewImage} />
+                ) : (
+                  <View style={styles.imagePickerPlaceholder}>
+                    <Ionicons name="image-outline" size={32} color={colors.textMuted} />
+                    <Text style={{ color: colors.textMuted, marginTop: 8, fontSize: 12, fontWeight: '600' }}>
+                      Tap to upload cover photo
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+
               <Text style={[styles.inputLabelText, { color: colors.textMuted }]}>EVENT TITLE</Text>
               <TextInput style={[styles.formInputBox, inputThemeStyle]} placeholder="e.g., Rooftop Jazz Mix" placeholderTextColor={colors.textMuted} value={eventTitle} onChangeText={setEventTitle} />
 
@@ -650,13 +716,34 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     paddingHorizontal: 24,
-    paddingTop: 24,
-    maxHeight: SCREEN_HEIGHT * 0.88,
+    height: SCREEN_HEIGHT * 0.88, // Ensure it has height for the scrollview
   },
-  organizeHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  organizeModalTitle: { fontSize: 18, fontWeight: '900' },
+  organizeHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 20 },
+  organizeModalTitle: { fontSize: 20, fontWeight: '900' },
   organizeFormScroll: { marginTop: 4 },
   modalFormContentStyle: { paddingBottom: Platform.OS === 'ios' ? 44 : 24 },
+  
+  // 🚨 ADDED STYLES FOR IMAGE PICKER
+  imagePickerBox: {
+    height: 160,
+    width: '100%',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    overflow: 'hidden',
+    marginBottom: 10,
+  },
+  previewImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  imagePickerPlaceholder: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
   inputLabelText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5, marginBottom: 6, marginTop: 14 },
   inputSubhintText: { fontSize: 11, color: '#a1a1aa', fontWeight: '500', marginBottom: 10, marginTop: -3 },
   formInputBox: {
@@ -686,17 +773,24 @@ const styles = StyleSheet.create({
     top: '50%',
     left: '50%',
     marginLeft: -18,
-    marginTop: -32,
+    marginTop: -36,
     alignItems: 'center',
-    justifyContent: 'center',
   },
-  pinShadowDot: { width: 6, height: 3, borderRadius: 2, backgroundColor: 'rgba(0,0,0,0.3)', marginTop: -2 },
+  pinShadowDot: {
+    width: 8,
+    height: 4,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 4,
+    marginTop: -4,
+  },
+  
   submitEventFormButton: {
     height: 52,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 28,
+    marginTop: 32,
+    marginBottom: 20,
   },
-  submitFormButtonText: { fontSize: 14, fontWeight: '700' },
+  submitFormButtonText: { fontSize: 15, fontWeight: '800' },
 });
