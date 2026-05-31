@@ -11,6 +11,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAppTheme } from '../_layout'; 
+import { useAuth } from '@clerk/expo'; // <-- Added for authentication
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.45;
@@ -32,6 +33,9 @@ interface DatabaseEvent {
 export default function DiscoverScreen() {
   const { theme, colors, toggleTheme } = useAppTheme();
   const isDark = theme === 'dark';
+  
+  // Get token for authenticated backend requests
+  const { getToken } = useAuth(); 
 
   const [events, setEvents] = useState<DatabaseEvent[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -64,7 +68,46 @@ export default function DiscoverScreen() {
     fetchEvents();
   }, []);
 
+  // --- NEW: API call to register the interaction in Supabase ---
+  const recordInteraction = async (eventId: string, interactionType: 'like' | 'rejected') => {
+  try {
+    const token = await getToken();
+    const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
+    
+    const response = await fetch(`${BASE_URL}/api/interactions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ eventId, interactionType })
+    });
+    
+    // Parse the response from the backend
+    const data = await response.json();
+
+    // Check if the backend actually returned a success status
+    if (!response.ok) {
+      console.error('❌ Backend rejected the interaction:', data);
+      return; // Stop here, don't print the success log
+    }
+    
+    console.log(`✅ Interaction verified and saved in DB: ${interactionType} for event ${eventId}`);
+  } catch (error) {
+    console.error('🚨 Network or fetch failure:', error);
+  }
+};
+
+  // --- UPDATED: Hooked up swipe handler to our interaction logic ---
   const handleSwipeComplete = (direction: 'left' | 'right') => {
+    const currentSwipedEvent = events[currentIndex];
+    
+    // Register the interaction in the background before moving on
+    if (currentSwipedEvent) {
+      const type = direction === 'right' ? 'like' : 'rejected';
+      recordInteraction(currentSwipedEvent.id, type);
+    }
+
     setCurrentIndex((prev) => prev + 1);
     translateX.value = 0;
     translateY.value = 0;
@@ -114,18 +157,22 @@ export default function DiscoverScreen() {
   const hasCardsLeft = currentIndex < events.length;
 
   const getCategoryTheme = (category?: string) => {
-    switch (category) {
-      case 'Gaming': return { color: '#8b5cf6', bg: isDark ? '#2e1065' : '#f5f3ff', text: isDark ? '#ddd6fe' : '#5b21b6' };
-      case 'Food': return { color: '#ef4444', bg: isDark ? '#7c2d12' : '#fff7ed', text: isDark ? '#ffedd5' : '#9a3412' }; 
-      case 'Tech': return { color: '#06b6d4', bg: isDark ? '#164e63' : '#ecfeff', text: isDark ? '#cffafe' : '#083344' };
-      case 'Art': return { color: '#ec4899', bg: isDark ? '#831843' : '#fdf2f8', text: isDark ? '#fce7f3' : '#9d174d' };
-      case 'Wellness': return { color: '#10b981', bg: isDark ? '#064e3b' : '#ecfdf5', text: isDark ? '#d1fae5' : '#065f46' };
+    switch (category?.toLowerCase()) {
+      case 'gaming': return { color: '#8b5cf6', bg: isDark ? '#2e1065' : '#f5f3ff', text: isDark ? '#ddd6fe' : '#5b21b6' };
+      case 'food': return { color: '#ef4444', bg: isDark ? '#7c2d12' : '#fff7ed', text: isDark ? '#ffedd5' : '#9a3412' }; 
+      case 'tech': return { color: '#06b6d4', bg: isDark ? '#164e63' : '#ecfeff', text: isDark ? '#cffafe' : '#083344' };
+      case 'art': return { color: '#ec4899', bg: isDark ? '#831843' : '#fdf2f8', text: isDark ? '#fce7f3' : '#9d174d' };
+      case 'wellness': return { color: '#10b981', bg: isDark ? '#064e3b' : '#ecfdf5', text: isDark ? '#d1fae5' : '#065f46' };
       default: return { color: '#3b82f6', bg: isDark ? '#1e3a8a' : '#eff6ff', text: isDark ? '#dbeafe' : '#1e40af' };
     }
   };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Ambient Background Blobs for a premium spatial UI feel */}
+      <View style={[styles.bgBlob, styles.bgBlobTop, { backgroundColor: isDark ? 'rgba(55, 48, 163, 0.4)' : 'rgba(224, 231, 255, 0.7)' }]} />
+      <View style={[styles.bgBlob, styles.bgBlobBottom, { backgroundColor: isDark ? 'rgba(131, 24, 67, 0.3)' : 'rgba(252, 231, 243, 0.6)' }]} />
+
       <View style={styles.header}>
         <View>
           <Text style={styles.headerSub}>MELA</Text>
@@ -133,8 +180,13 @@ export default function DiscoverScreen() {
         </View>
         
         <TouchableOpacity 
-          style={[styles.toggleButton, { backgroundColor: theme === 'light' ? '#fef08a' : '#451a03' }]}
+          style={[
+            styles.toggleButton, 
+            { backgroundColor: theme === 'light' ? '#fef08a' : '#451a03' },
+            isDark && { borderWidth: 1, borderColor: '#713f12' }
+          ]}
           onPress={toggleTheme} 
+          activeOpacity={0.8}
         >
           <Ionicons 
             name={theme === 'light' ? "moon" : "sunny"} 
@@ -157,7 +209,7 @@ export default function DiscoverScreen() {
               const stackPosition = index - currentIndex;
 
               const backgroundStyle = stackPosition === 1 ? styles.secondCard : styles.thirdCard;
-              const themeCardStyle = { backgroundColor: colors.cardBg, borderColor: colors.cardBorder };
+              const themeCardStyle = { backgroundColor: colors.cardBg, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' };
               
               const imageUrl = event.image_url || 'https://via.placeholder.com/400x300?text=No+Image';
               const categoryText = event.category ? event.category.toUpperCase() : 'GENERAL';
@@ -236,15 +288,17 @@ export default function DiscoverScreen() {
             onPress={() => { 
               translateX.value = withTiming(-SCREEN_WIDTH * 1.5, { duration: 200 }, () => runOnJS(handleSwipeComplete)('left')); 
             }} 
-            style={[styles.circleButton, { backgroundColor: colors.btnBg, borderColor: theme === 'light' ? '#fee2e2' : '#451d1d' }]}
+            style={[styles.circleButton, { backgroundColor: colors.btnBg, borderColor: theme === 'light' ? '#fee2e2' : 'rgba(239, 68, 68, 0.2)' }]}
+            activeOpacity={0.8}
           >
-            <Ionicons name="close" size={28} color="#ef4444" />
+            <Ionicons name="close" size={32} color="#ef4444" />
           </TouchableOpacity>
           <TouchableOpacity 
             onPress={() => { 
               translateX.value = withTiming(SCREEN_WIDTH * 1.5, { duration: 200 }, () => runOnJS(handleSwipeComplete)('right')); 
             }} 
-            style={[styles.circleButton, { backgroundColor: theme === 'light' ? '#fffdf0' : '#252211', borderColor: theme === 'light' ? '#fef08a' : '#715c00' }]}
+            style={[styles.circleButton, { backgroundColor: theme === 'light' ? '#fffdf0' : '#252211', borderColor: theme === 'light' ? '#fef08a' : 'rgba(234, 179, 8, 0.2)' }]}
+            activeOpacity={0.8}
           >
             <Ionicons name="heart" size={28} color="#eab308" />
           </TouchableOpacity>
@@ -254,7 +308,7 @@ export default function DiscoverScreen() {
       {/* 📋 DETAILED POPUP MODAL */}
       {selectedEvent && (() => {
         const catTheme = getCategoryTheme(selectedEvent.category);
-        const sharedCardStyle = { backgroundColor: colors.cardBg, borderColor: colors.cardBorder };
+        const sharedCardStyle = { backgroundColor: colors.cardBg, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' };
         const imageUrl = selectedEvent.image_url || 'https://via.placeholder.com/400x300?text=No+Image';
 
         return (
@@ -328,7 +382,7 @@ export default function DiscoverScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {/* 🟩 NEW REGISTER FULL WIDTH BUTTON */}
+                {/* 🟩 REGISTER FULL WIDTH BUTTON */}
                 <TouchableOpacity
                   style={[styles.registerButton, isDark && { backgroundColor: '#064e3b', borderColor: '#047857' }]}
                   activeOpacity={0.8}
@@ -348,91 +402,101 @@ export default function DiscoverScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingTop: 60, paddingBottom: 16 },
-  headerSub: { fontSize: 30, fontWeight: '900', color: '#eab308', letterSpacing: 1, textTransform: 'uppercase' },
-  headerTitle: { fontSize: 28, fontWeight: '900', letterSpacing: -0.5, marginTop: 1 },
-  toggleButton: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-  cardStackContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  card: { position: 'absolute', width: SCREEN_WIDTH * 0.92, height: SCREEN_HEIGHT * 0.58, borderRadius: 28, borderWidth: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.04, shadowRadius: 12, elevation: 4, overflow: 'hidden' },
+  container: { flex: 1, position: 'relative' },
+  
+  bgBlob: { position: 'absolute', width: SCREEN_WIDTH * 1.2, height: SCREEN_WIDTH * 1.2, borderRadius: 9999 },
+  bgBlobTop: { top: -SCREEN_WIDTH * 0.4, right: -SCREEN_WIDTH * 0.3 },
+  bgBlobBottom: { bottom: -SCREEN_WIDTH * 0.2, left: -SCREEN_WIDTH * 0.4 },
+  
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingTop: 60, paddingBottom: 16, zIndex: 10 },
+  headerSub: { fontSize: 13, fontWeight: '900', color: '#eab308', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 2 },
+  headerTitle: { fontSize: 32, fontWeight: '900', letterSpacing: -0.5 },
+  toggleButton: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
+  
+  cardStackContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', zIndex: 10 },
+  card: { position: 'absolute', width: SCREEN_WIDTH * 0.9, height: SCREEN_HEIGHT * 0.6, borderRadius: 32, borderWidth: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.08, shadowRadius: 20, elevation: 8, overflow: 'hidden' },
   topCard: { zIndex: 10 },
-  secondCard: { transform: [{ scale: 0.95 }, { translateY: 15 }], zIndex: 5, opacity: 0.9 },
-  thirdCard: { transform: [{ scale: 0.90 }, { translateY: 30 }], zIndex: 1, opacity: 0.6 },
-  cardImage: { width: '100%', height: '55%' },
-  cardInfoContainer: { padding: 20, flex: 1 },
-  categoryBadge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginBottom: 8 },
-  categoryText: { fontSize: 10, fontWeight: '900' },
-  eventTitle: { fontSize: 22, fontWeight: '900' },
-  summaryText: { fontSize: 14, marginTop: 4, fontStyle: 'italic', marginBottom: 12 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
-  metaText: { fontSize: 13, marginLeft: 6, fontWeight: '500' },
-  likeBadge: { position: 'absolute', top: 35, left: 25, borderWidth: 3, borderColor: '#22c55e', backgroundColor: 'rgba(24, 24, 27, 0.85)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8, transform: [{ rotate: '-10deg' }], zIndex: 99 },
-  likeText: { color: '#22c55e', fontSize: 24, fontWeight: '900', letterSpacing: 1.5, textShadowColor: 'rgba(0, 0, 0, 0.5)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
-  nopeBadge: { position: 'absolute', top: 35, right: 25, borderWidth: 3, borderColor: '#ef4444', backgroundColor: 'rgba(24, 24, 27, 0.85)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8, transform: [{ rotate: '10deg' }], zIndex: 99 },
-  nopeText: { color: '#ef4444', fontSize: 24, fontWeight: '900', letterSpacing: 1.5, textShadowColor: 'rgba(0, 0, 0, 0.5)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
-  actionButtonRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingBottom: 10, gap: 24 },
-  circleButton: { width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2, borderWidth: 1 },
+  secondCard: { transform: [{ scale: 0.95 }, { translateY: 20 }], zIndex: 5, opacity: 0.95 },
+  thirdCard: { transform: [{ scale: 0.90 }, { translateY: 40 }], zIndex: 1, opacity: 0.75 },
+  
+  cardImage: { width: '100%', height: '52%' },
+  cardInfoContainer: { padding: 24, flex: 1, justifyContent: 'center' },
+  categoryBadge: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, marginBottom: 12 },
+  categoryText: { fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
+  eventTitle: { fontSize: 24, fontWeight: '900', letterSpacing: -0.5 },
+  summaryText: { fontSize: 15, marginTop: 6, fontStyle: 'italic', marginBottom: 16, lineHeight: 20 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 'auto' },
+  metaText: { fontSize: 14, marginLeft: 6, fontWeight: '600' },
+  
+  likeBadge: { position: 'absolute', top: 40, left: 30, borderWidth: 4, borderColor: '#22c55e', backgroundColor: 'rgba(24, 24, 27, 0.7)', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 12, transform: [{ rotate: '-10deg' }], zIndex: 99 },
+  likeText: { color: '#22c55e', fontSize: 28, fontWeight: '900', letterSpacing: 2 },
+  nopeBadge: { position: 'absolute', top: 40, right: 30, borderWidth: 4, borderColor: '#ef4444', backgroundColor: 'rgba(24, 24, 27, 0.7)', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 12, transform: [{ rotate: '10deg' }], zIndex: 99 },
+  nopeText: { color: '#ef4444', fontSize: 28, fontWeight: '900', letterSpacing: 2 },
+  
+  actionButtonRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingBottom: 20, gap: 32, zIndex: 10 },
+  circleButton: { width: 72, height: 72, borderRadius: 36, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.12, shadowRadius: 16, elevation: 5, borderWidth: 1.5 },
+  
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  emptyEmoji: { fontSize: 50, marginBottom: 10 },
-  emptyTitle: { fontSize: 18, fontWeight: 'bold' },
+  emptyEmoji: { fontSize: 60, marginBottom: 16 },
+  emptyTitle: { fontSize: 20, fontWeight: '800' },
 
-  /* 📋 POPUP SYSTEM STYLES */
+  /* POPUP SYSTEM STYLES */
   modalBlurOverlay: {
     position: 'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(24, 24, 27, 0.65)',
+    backgroundColor: 'rgba(9, 9, 11, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 2000,
   },
   centerHeroCard: {
-    width: SCREEN_WIDTH * 0.88,
-    maxHeight: SCREEN_HEIGHT * 0.80,
-    borderRadius: 32,
+    width: SCREEN_WIDTH * 0.9,
+    maxHeight: SCREEN_HEIGHT * 0.85,
+    borderRadius: 36,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.2,
-    shadowRadius: 30,
-    elevation: 15,
+    shadowOffset: { width: 0, height: 24 },
+    shadowOpacity: 0.25,
+    shadowRadius: 40,
+    elevation: 20,
     borderWidth: 1,
   },
-  heroCardImage: { width: '100%', height: SCREEN_HEIGHT * 0.22, backgroundColor: '#e4e4e7' },
+  heroCardImage: { width: '100%', height: SCREEN_HEIGHT * 0.24, backgroundColor: '#e4e4e7' },
   closeCardButton: {
     position: 'absolute',
-    top: 16,
-    right: 16,
+    top: 20,
+    right: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  heroCardContent: { padding: 24 },
-  tagContainer: { borderWidth: 1, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginBottom: 10 },
-  categoryBadgeText: { fontSize: 10, fontWeight: '900' },
-  heroCardTitle: { fontSize: 22, fontWeight: '900', lineHeight: 28 },
-  heroCardSummary: { fontSize: 14, color: '#eab308', fontWeight: '700', marginTop: 4 },
-  heroCardDesc: { fontSize: 13, marginTop: 8, lineHeight: 18 },
-  dividerLine: { height: 1, marginTop: 14, marginBottom: 14 },
+  heroCardContent: { padding: 28 },
+  tagContainer: { borderWidth: 1, alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, marginBottom: 12 },
+  categoryBadgeText: { fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
+  heroCardTitle: { fontSize: 24, fontWeight: '900', lineHeight: 30, letterSpacing: -0.5 },
+  heroCardSummary: { fontSize: 15, color: '#eab308', fontWeight: '800', marginTop: 6 },
+  heroCardDesc: { fontSize: 14, marginTop: 10, lineHeight: 22, opacity: 0.9 },
+  dividerLine: { height: 1, marginTop: 16, marginBottom: 16, opacity: 0.6 },
   metaRowPopup: { flexDirection: 'row', alignItems: 'center' },
-  metaTextPopup: { fontSize: 12, marginLeft: 8, fontWeight: '600', flex: 1 },
+  metaTextPopup: { fontSize: 13, marginLeft: 10, fontWeight: '600', flex: 1 },
   modalActionButtonRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 16,
-    gap: 12,
+    marginTop: 20,
+    gap: 16,
   },
   actionButton: {
     flex: 1,
-    height: 46,
-    borderRadius: 14,
+    height: 50,
+    borderRadius: 16,
     borderWidth: 1.5,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   dislikeButton: {
     borderColor: '#fee2e2',
@@ -443,31 +507,32 @@ const styles = StyleSheet.create({
     backgroundColor: '#fffbcb',
   },
   actionButtonText: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 15,
+    fontWeight: '800',
   },
-  /* 🟩 REGISTER STYLES */
+  /* REGISTER STYLES */
   registerButton: {
     width: '100%',
-    height: 48,
-    borderRadius: 14,
+    height: 52,
+    borderRadius: 16,
     backgroundColor: '#10b981',
     borderWidth: 1.5,
     borderColor: '#059669',
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 12,
-    gap: 8,
+    marginTop: 16,
+    gap: 10,
     shadowColor: '#10b981',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 4,
   },
   registerButtonText: {
     color: '#ffffff',
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '800',
+    letterSpacing: 0.5,
   },
 });

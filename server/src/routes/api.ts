@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import { supabase } from '../config/supabase';
@@ -64,6 +65,42 @@ router.get('/events', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Fetch Events Error:', error);
     res.status(500).json({ error: 'Failed to fetch events' });
+  }
+});
+
+// ==========================================
+// 1.5 GET LIKED EVENTS (Profile Dashboard)
+// ==========================================
+router.get('/events/liked', async (req: ClerkRequest, res: Response) => {
+  try {
+    const userId = req.auth?.userId;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized: No token' });
+
+    // Standard join syntax. If this fails, we will print the EXACT error.
+    const { data: likedData, error } = await supabase
+      .from('user_interactions')
+      .select(`
+        event_id,
+        events (*) 
+      `)
+      .eq('clerk_user_id', userId)
+      .eq('interaction_type', 'like');
+
+    // 🚨 Check for database join errors
+    if (error) {
+      console.error('Supabase Join Error:', error);
+      return res.status(500).json({ error: 'Database join failed', details: error.message, hint: error.hint });
+    }
+
+    // Extract the nested event objects and clean out any empty rows
+    const extractedLikedEvents = (likedData || [])
+      .map(item => item.events)
+      .filter(Boolean);
+
+    res.status(200).json(extractedLikedEvents);
+  } catch (error: any) {
+    console.error('Fetch Liked Events Server Error:', error);
+    res.status(500).json({ error: 'Failed to fetch liked events', details: error.message });
   }
 });
 
@@ -313,6 +350,92 @@ router.get('/recommendations', async (req: ClerkRequest, res: Response) => {
   } catch (error) {
     console.error('ML Proxy Error:', error);
     res.status(500).json({ error: 'Failed to fetch recommendations' });
+  }
+});
+
+// ==========================================
+// 6. POST INTERACTION (Like / Reject)
+// ==========================================
+router.post('/interactions', async (req: ClerkRequest, res: Response) => {
+  try {
+    const userId = req.auth?.userId;
+    const { eventId, interactionType } = req.body; 
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized: Missing Clerk Token' });
+    }
+    if (!eventId || !interactionType) {
+      return res.status(400).json({ error: 'Missing eventId or interactionType' });
+    }
+
+    // --- FIX: Ensure User Exists in Supabase ---
+    // If the frontend didn't hit /auth/sync first, this prevents the Foreign Key crash!
+    const { error: userError } = await supabase
+      .from('users')
+      .upsert([{ clerk_user_id: userId }], { onConflict: 'clerk_user_id' });
+
+    if (userError) {
+      console.error("Warning: Failed to sync user to Supabase:", userError);
+    }
+    // -------------------------------------------
+
+    const score = interactionType === 'like' ? 1.0 : -1.0;
+
+    // Explicitly pass an ID and timestamp in case Supabase isn't auto-generating them
+    const payload = {
+      id: uuidv4(), // Generate a random UUID
+      clerk_user_id: userId,
+      event_id: eventId,
+      interaction_type: interactionType,
+      score: score,
+      timestamp: new Date().toISOString() // Provide current timestamp
+    };
+
+    const { data, error } = await supabase
+      .from('user_interactions')
+      .insert([payload])
+      .select(); // Ask Supabase to return the inserted data
+
+    if (error) {
+      console.error('Supabase Insert Error:', error);
+      // Send the EXACT error back to the frontend
+      return res.status(500).json({ error: 'Database error', details: error.message, hint: error.hint });
+    }
+
+    res.status(200).json({ success: true, data });
+  } catch (error: any) {
+    console.error('Catch Block Error:', error);
+    res.status(500).json({ error: 'Server crashed', details: error.message });
+  }
+});
+
+// ==========================================
+// 7. GET USER PROFILE
+// ==========================================
+router.get('/profile', async (req: ClerkRequest, res: Response) => {
+  try {
+    const userId = req.auth?.userId;
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized: No user ID found' });
+    }
+
+    const { data: userProfile, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('clerk_user_id', userId)
+      .single();
+
+    if (error && error.code === 'PGRST116') {
+      return res.status(404).json({ error: 'User profile not found in database' });
+    } else if (error) {
+      throw error;
+    }
+
+    res.status(200).json(userProfile);
+  } catch (error: any) {
+    console.error('Fetch Profile Error:', error);
+    res.status(500).json({ error: 'Failed to fetch profile data' });
   }
 });
 
