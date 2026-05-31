@@ -323,7 +323,7 @@ export default function ProfileScreen() {
               </View>
 
               {rsvpedEvents.length === 0 ? (
-                 <Text style={[styles.emptyStateText, { color: colors.textMuted }]}>You haven't secured tickets to any events yet.</Text>
+                 <Text style={[styles.emptyStateText, { color: colors.textMuted }]}>You haven&apos;t secured tickets to any events yet.</Text>
               ) : (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.likedHorizontalScroll}>
                   {rsvpedEvents.map((event) => {
@@ -354,7 +354,7 @@ export default function ProfileScreen() {
               </View>
 
               {hostedEvents.length === 0 ? (
-                 <Text style={[styles.emptyStateText, { color: colors.textMuted }]}>You haven't hosted any events yet.</Text>
+                 <Text style={[styles.emptyStateText, { color: colors.textMuted }]}>You haven&apos;t hosted any events yet.</Text>
               ) : (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.likedHorizontalScroll}>
                   {hostedEvents.map((event) => {

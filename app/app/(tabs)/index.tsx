@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, Image, Dimensions, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, View, Text, Image, Dimensions, TouchableOpacity, ActivityIndicator, Alert, ScrollView } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
@@ -11,7 +11,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAppTheme } from '../_layout'; 
-import { useAuth } from '@clerk/expo'; // <-- Added for authentication
+import { useAuth } from '@clerk/expo'; 
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.45;
@@ -34,17 +34,14 @@ export default function DiscoverScreen() {
   const { theme, colors, toggleTheme } = useAppTheme();
   const isDark = theme === 'dark';
   
-  // Get token for authenticated backend requests
   const { getToken } = useAuth(); 
 
   const [events, setEvents] = useState<DatabaseEvent[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   
-  // --- NEW: Track RSVPs explicitly ---
   const [rsvpedEvents, setRsvpedEvents] = useState<string[]>([]);
   
-  // Popup Detail Modal State
   const [selectedEvent, setSelectedEvent] = useState<DatabaseEvent | null>(null);
 
   const translateX = useSharedValue(0);
@@ -68,7 +65,6 @@ export default function DiscoverScreen() {
       }
     };
 
-    // --- NEW: Fetch user's registered events on load ---
     const fetchUserRegistrations = async () => {
       try {
         const token = await getToken();
@@ -89,14 +85,12 @@ export default function DiscoverScreen() {
     fetchUserRegistrations();
   }, []);
 
-  // --- NEW: Handle Event Registration ---
   const handleRegisterEvent = async (id: string) => {
     if (rsvpedEvents.includes(id)) {
       Alert.alert("Notice", "You are already registered for this event.");
       return;
     }
 
-    // Optimistically update the UI so button changes instantly
     setRsvpedEvents(prev => [...prev, id]);
 
     try {
@@ -115,13 +109,11 @@ export default function DiscoverScreen() {
       Alert.alert("Success! 🎉", "Your ticket has been confirmed!");
     } catch (err) {
       console.error("RSVP Action Crash:", err);
-      // Revert if network fails
       setRsvpedEvents(prev => prev.filter(item => item !== id));
       Alert.alert("Action Failed", "Could not process your registration. Try again later.");
     }
   };
 
-  // --- API call to register the interaction in Supabase ---
   const recordInteraction = async (eventId: string, interactionType: 'like' | 'rejected') => {
     try {
       const token = await getToken();
@@ -149,7 +141,6 @@ export default function DiscoverScreen() {
     }
   };
 
-  // --- Hooked up swipe handler to our interaction logic ---
   const handleSwipeComplete = (direction: 'left' | 'right') => {
     const currentSwipedEvent = events[currentIndex];
     
@@ -361,7 +352,6 @@ export default function DiscoverScreen() {
         const sharedCardStyle = { backgroundColor: colors.cardBg, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' };
         const imageUrl = selectedEvent.image_url || 'https://via.placeholder.com/400x300?text=No+Image';
 
-        // --- NEW: Calculate if user is registered ---
         const isRegistered = rsvpedEvents.includes(selectedEvent.id);
 
         return (
@@ -377,7 +367,12 @@ export default function DiscoverScreen() {
                 <Ionicons name="close-circle" size={34} color="#ffffff" />
               </TouchableOpacity>
 
-              <View style={styles.heroCardContent}>
+              {/* ✨ MODIFIED: Changed View to ScrollView to allow scrolling over long content */}
+              <ScrollView 
+                style={{ flexShrink: 1 }}
+                contentContainerStyle={styles.heroCardContent}
+                showsVerticalScrollIndicator={false}
+              >
                 <View style={[styles.tagContainer, { backgroundColor: catTheme.bg, borderColor: catTheme.color }]}>
                   <Text style={[styles.categoryBadgeText, { color: catTheme.text }]}>
                     ⚡ {selectedEvent.category?.toUpperCase() || 'EVENT'}
@@ -435,7 +430,7 @@ export default function DiscoverScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {/* 🟩 REGISTER FULL WIDTH BUTTON -- UPDATED TO WORK -- */}
+                {/* REGISTER FULL WIDTH BUTTON */}
                 <TouchableOpacity
                   style={[
                     styles.registerButton, 
@@ -456,7 +451,7 @@ export default function DiscoverScreen() {
                   </Text>
                 </TouchableOpacity>
 
-              </View>
+              </ScrollView>
             </View>
           </View>
         );
@@ -535,6 +530,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 8,
     elevation: 8,
+    zIndex: 10,
   },
   heroCardContent: { padding: 28 },
   tagContainer: { borderWidth: 1, alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, marginBottom: 12 },
