@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, Dimensions, Image, TouchableOpacity, ScrollView, Modal, TextInput, KeyboardAvoidingView, Platform, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { StyleSheet, View, Text, Dimensions, Image, TouchableOpacity, ScrollView, Modal, TextInput, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, RefreshControl } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MapView, { Region } from 'react-native-maps';
 import { useAppTheme } from '../_layout'; 
 import { useUser, useAuth } from '@clerk/expo';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as ImagePicker from 'expo-image-picker'; // 👈 Added for image uploads
+import * as ImagePicker from 'expo-image-picker'; 
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -39,9 +39,10 @@ export default function ProfileScreen() {
   const [likedEvents, setLikedEvents] = useState<any[]>([]);
   const [rsvpedEvents, setRsvpedEvents] = useState<any[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   // --- FORM STATE ---
-  const [imageUri, setImageUri] = useState<string | null>(null); // 👈 Added state for cover image
+  const [imageUri, setImageUri] = useState<string | null>(null); 
   const [eventTitle, setEventTitle] = useState('');
   const [eventSummary, setEventSummary] = useState('');
   const [eventDescription, setEventDescription] = useState('');
@@ -114,6 +115,12 @@ export default function ProfileScreen() {
     fetchProfileData();
   }, [user?.id]);
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchProfileData();
+    setRefreshing(false);
+  }, [user?.id]);
+
   // --- IMAGE PICKER HANDLER ---
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -145,18 +152,15 @@ export default function ProfileScreen() {
       const token = await getToken();
       const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL; 
 
-      // 🚨 Using FormData instead of JSON.stringify to handle image uploads
       const formData = new FormData();
       formData.append('title', eventTitle);
       formData.append('summary', eventSummary);
       formData.append('description', eventDescription);
       formData.append('category', eventCategory);
       
-      // Map string values for FormData
       const tagsArray = eventTags ? eventTags.split(',').map(t => t.trim()) : [];
       formData.append('tags', JSON.stringify(tagsArray));
       
-      // 🚨 FIX: Using lat and lng exactly as the backend expects
       formData.append('lat', String(targetLocation.latitude));
       formData.append('lng', String(targetLocation.longitude));
       
@@ -164,7 +168,6 @@ export default function ProfileScreen() {
       formData.append('contact_email', eventEmail);
       formData.append('contact_phone', eventPhone);
 
-      // Append image if selected, otherwise fallback
       if (imageUri) {
         const filename = imageUri.split('/').pop() || 'upload.jpg';
         const match = /\.(\w+)$/.exec(filename);
@@ -182,8 +185,6 @@ export default function ProfileScreen() {
       const response = await fetch(`${BASE_URL}/api/events`, {
         method: 'POST',
         headers: {
-          // 🚨 Note: DO NOT set 'Content-Type' when sending FormData in React Native.
-          // fetch will automatically set it to 'multipart/form-data' with the correct boundary!
           Authorization: `Bearer ${token}`,
         },
         body: formData,
@@ -195,7 +196,6 @@ export default function ProfileScreen() {
       Alert.alert('Success! 🎉', 'Your custom community coordinate event mapping vector has been created.');
       setOrganizeModalVisible(false);
       
-      // Clear all fields
       setImageUri(null);
       setEventTitle(''); setEventSummary(''); setEventDescription('');
       setEventCategory(''); setEventTags(''); setAddress('');
@@ -239,9 +239,9 @@ export default function ProfileScreen() {
   const displayName = user?.fullName || 'Community Member';
   const displayEmail = user?.primaryEmailAddress?.emailAddress || '@user';
 
-  const gradientColors = isDark 
-    ? ['#09090b', '#18181b', '#27272a']  
-    : ['#ffffff', '#f4f4f5', '#e4e4e7']; 
+  const gradientColors = isDark
+    ? (['#09090b', '#18181b', '#27272a'] as const)
+    : (['#ffffff', '#f4f4f5', '#e4e4e7'] as const);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -251,12 +251,23 @@ export default function ProfileScreen() {
         <View style={styles.headerTitleContainer}>
           <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Your Profile</Text>
         </View>
-        <TouchableOpacity style={styles.hamburgerButton} onPress={() => setMenuVisible(true)} activeOpacity={0.7}>
-          <Ionicons name="menu" size={26} color={colors.textPrimary} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+          <TouchableOpacity onPress={fetchProfileData} activeOpacity={0.7}>
+            <Ionicons name="refresh" size={24} color={colors.textPrimary} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.hamburgerButton} onPress={() => setMenuVisible(true)} activeOpacity={0.7}>
+            <Ionicons name="menu" size={26} color={colors.textPrimary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.textPrimary} />
+        }
+      >
         
         {/* CENTRAL PROFILE HERO */}
         <View style={styles.profileHeroSection}>
@@ -485,7 +496,6 @@ export default function ProfileScreen() {
 
             <ScrollView showsVerticalScrollIndicator={false} style={styles.organizeFormScroll} contentContainerStyle={styles.modalFormContentStyle}>
               
-              {/* 🚨 ADDED IMAGE UPLOAD FIELD HERE */}
               <Text style={[styles.inputLabelText, { color: colors.textMuted }]}>EVENT COVER IMAGE</Text>
               <TouchableOpacity 
                 style={[styles.imagePickerBox, { borderColor: colors.cardBorder, backgroundColor: isDark ? '#18181b' : '#fafafa' }]} 
@@ -716,14 +726,13 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     paddingHorizontal: 24,
-    height: SCREEN_HEIGHT * 0.88, // Ensure it has height for the scrollview
+    height: SCREEN_HEIGHT * 0.88, 
   },
   organizeHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 20 },
   organizeModalTitle: { fontSize: 20, fontWeight: '900' },
   organizeFormScroll: { marginTop: 4 },
   modalFormContentStyle: { paddingBottom: Platform.OS === 'ios' ? 44 : 24 },
   
-  // 🚨 ADDED STYLES FOR IMAGE PICKER
   imagePickerBox: {
     height: 160,
     width: '100%',
