@@ -4,11 +4,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import MapView, { Region } from 'react-native-maps';
 import { useAppTheme } from '../_layout'; 
 import { useUser, useAuth } from '@clerk/expo';
-// 1. ✨ Import LinearGradient from Expo
 import { LinearGradient } from 'expo-linear-gradient';
-
-// UPDATE THIS TO YOUR LOCAL EXPRESSED BACKEND URL (e.g., http://10.0.2.2:3000 on Android emulator or your specific IP)
-const API_URL = 'EXPO_PUBLIC_API_BASE_URL'; 
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -40,6 +36,7 @@ export default function ProfileScreen() {
   // --- DATA FETCHING STATE ---
   const [hostedEvents, setHostedEvents] = useState<any[]>([]);
   const [likedEvents, setLikedEvents] = useState<any[]>([]);
+  const [rsvpedEvents, setRsvpedEvents] = useState<any[]>([]); // 👈 Added state hook for active RSVPs
   const [isLoadingData, setIsLoadingData] = useState(true);
 
   // --- FORM STATE ---
@@ -63,11 +60,10 @@ export default function ProfileScreen() {
 
     try {
       const token = await getToken();
-      
       const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL; 
       
       if (!BASE_URL) {
-         console.error("🚨 BASE_URL is missing! Check your .env file and restart Expo.");
+         console.error("🚨 BASE_URL is missing! Check environment bundles.");
          return;
       }
 
@@ -78,11 +74,7 @@ export default function ProfileScreen() {
 
       // 1. Fetch Hosted Events
       const eventsRes = await fetch(`${BASE_URL}/api/events`, { headers });
-      
-      if (!eventsRes.ok) {
-        throw new Error(`Failed to fetch events feed. Status: ${eventsRes.status}`);
-      }
-      
+      if (!eventsRes.ok) throw new Error(`Events status: ${eventsRes.status}`);
       const allEvents = await eventsRes.json();
       const userHosted = allEvents.filter((e: any) => e.organizer_id === user?.id);
       setHostedEvents(userHosted);
@@ -90,29 +82,35 @@ export default function ProfileScreen() {
       // 2. Fetch Liked Events
       try {
         const likedRes = await fetch(`${BASE_URL}/api/events/liked`, { headers });
-        
-        if (!likedRes.ok) {
-          const errorData = await likedRes.json();
-          console.error("❌ Backend rejected Liked Events fetch:", errorData);
-        } else {
+        if (likedRes.ok) {
           const likedData = await likedRes.json();
           setLikedEvents(likedData);
         }
       } catch (err) {
-        console.error("🚨 Network error fetching liked events:", err);
+        console.error("🚨 Error syncing liked components:", err);
+      }
+
+      // 3. Fetch Registered/RSVPed Events 👈 Added direct API synchronization pass
+      try {
+        const rsvpRes = await fetch(`${BASE_URL}/api/events/rsvp`, { headers });
+        if (rsvpRes.ok) {
+          const rsvpData = await rsvpRes.json();
+          setRsvpedEvents(rsvpData);
+        }
+      } catch (err) {
+        console.error("🚨 Error syncing registration tickets:", err);
       }
 
     } catch (err: any) {
-      console.error('❌ Error fetching profile data:', err.message);
+      console.error('❌ Error rendering secure core datasets:', err.message);
     } finally {
       setIsLoadingData(false);
     }
-  }; // 🔧 Fixed missing block closure from original snippet
+  };
 
   useEffect(() => {
     fetchProfileData();
   }, [user?.id]);
-
 
   // --- CREATE EVENT SUBMISSION TO EXPRESS BACKEND ---
   const handleCreateEventSubmit = async () => {
@@ -123,34 +121,33 @@ export default function ProfileScreen() {
 
     try {
       const token = await getToken();
-      
-      const formData = new FormData();
-      formData.append('title', eventTitle);
-      formData.append('summary', eventSummary);
-      formData.append('description', eventDescription);
-      formData.append('category', eventCategory);
-      formData.append('tags', eventTags); 
-      formData.append('lat', targetLocation.latitude.toString()); 
-      formData.append('lng', targetLocation.longitude.toString()); 
-      formData.append('address', address);
-      formData.append('contact_email', eventEmail);
-      formData.append('contact_phone', eventPhone);
+      const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL; 
 
-      const response = await fetch(`${API_URL}/events`, {
+      const response = await fetch(`${BASE_URL}/api/events`, {
         method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: formData,
+        body: JSON.stringify({
+          title: eventTitle,
+          summary: eventSummary,
+          description: eventDescription,
+          category: eventCategory,
+          tags: eventTags ? eventTags.split(',').map(t => t.trim()) : [],
+          latitude: targetLocation.latitude,
+          longitude: targetLocation.longitude,
+          address: address,
+          contact_email: eventEmail,
+          contact_phone: eventPhone,
+          image_url: USER_PROFILE.fallback_image
+        }),
       });
 
       const responseData = await response.json();
+      if (!response.ok) throw new Error(responseData.error || 'Failed to publish event.');
 
-      if (!response.ok) {
-        throw new Error(responseData.error || 'Failed to create event.');
-      }
-
-      Alert.alert('Success!', 'Your event coordinate vector mapping data has been processed and published.');
+      Alert.alert('Success! 🎉', 'Your custom community coordinate event mapping vector has been created.');
       setOrganizeModalVisible(false);
       
       setEventTitle(''); setEventSummary(''); setEventDescription('');
@@ -158,13 +155,11 @@ export default function ProfileScreen() {
       setEventEmail(''); setEventPhone('');
       
       fetchProfileData();
-
     } catch (err: any) {
       console.error('API insertion error:', err);
       Alert.alert('Publishing Error', err.message || 'Failed to connect to server.');
     }
   };
-
 
   const handleRegionChangeComplete = (region: Region) => {
     setTargetLocation({ latitude: region.latitude, longitude: region.longitude });
@@ -197,22 +192,14 @@ export default function ProfileScreen() {
   const displayName = user?.fullName || 'Community Member';
   const displayEmail = user?.primaryEmailAddress?.emailAddress || '@user';
 
-  // 2. 🎨 Choose gradient shades to mirror your discover page tabs
   const gradientColors = isDark 
-    ? ['#09090b', '#18181b', '#27272a']  // Deep rich dark mode gradient
-    : ['#ffffff', '#f4f4f5', '#e4e4e7']; // Clean, light mode gradient
+    ? ['#09090b', '#18181b', '#27272a']  
+    : ['#ffffff', '#f4f4f5', '#e4e4e7']; 
 
   return (
-    // Outer View remains structural layout root
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <LinearGradient colors={gradientColors} style={StyleSheet.absoluteFillObject} />
       
-      {/* 3. 🌫️ Safe background layer matching discover page flow */}
-      <LinearGradient 
-        colors={gradientColors} 
-        style={StyleSheet.absoluteFillObject} 
-      />
-      
-      {/* 4. Background color changed to transparent to let gradient pass through */}
       <View style={[styles.headerBar, { backgroundColor: 'transparent', borderBottomColor: colors.cardBorder }]}>
         <View style={styles.headerTitleContainer}>
           <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Your Profile</Text>
@@ -231,7 +218,6 @@ export default function ProfileScreen() {
           </View>
           <Text style={[styles.profileName, { color: colors.textPrimary }]}>{displayName}</Text>
           <Text style={styles.profileUsername}>{displayEmail}</Text>
-          
           <Text style={[styles.profileBio, { color: colors.textSecondary }]}>{USER_PROFILE.bio}</Text>
         </View>
 
@@ -243,8 +229,9 @@ export default function ProfileScreen() {
           </View>
           <View style={[styles.statDivider, { backgroundColor: colors.cardBorder }]} />
           <View style={styles.statSegment}>
-            <Text style={[styles.statValue, { color: colors.textPrimary }]}>--</Text>
-            <Text style={[styles.statLabel, { color: colors.textMuted }]}>Attended</Text>
+            {/* Live Counter Sync */}
+            <Text style={[styles.statValue, { color: colors.textPrimary }]}>{rsvpedEvents.length}</Text> 
+            <Text style={[styles.statLabel, { color: colors.textMuted }]}>Registered</Text>
           </View>
           <View style={[styles.statDivider, { backgroundColor: colors.cardBorder }]} />
           <View style={styles.statSegment}>
@@ -271,11 +258,42 @@ export default function ProfileScreen() {
           <ActivityIndicator size="large" color={colors.textPrimary} style={{ marginTop: 40 }} />
         ) : (
           <>
-            {/* YOUR EVENTS */}
+            {/* LIVE DYNAMIC REGISTERED / RSVP EVENTS HORIZONTAL CAROUSEL */}
+            <View style={styles.sectionSectionWrapper}>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={[styles.sectionHeadingText, { color: colors.textPrimary }]}>Registered Events 🎫</Text>
+                {rsvpedEvents.length > 0 && <Text style={[styles.viewAllTextLink, { color: colors.textMuted }]}>Confirmed Ticket</Text>}
+              </View>
+
+              {rsvpedEvents.length === 0 ? (
+                 <Text style={[styles.emptyStateText, { color: colors.textMuted }]}>You haven't secured tickets to any events yet.</Text>
+              ) : (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.likedHorizontalScroll}>
+                  {rsvpedEvents.map((event) => {
+                    const themeColor = getCategoryColor(event.category);
+                    return (
+                      <View key={`rsvp-${event.id}`} style={[styles.eventMiniCard, dynamicCardStyle]}>
+                        <Image source={{ uri: event.image_url || USER_PROFILE.fallback_image }} style={styles.eventMiniCardImage} />
+                        <View style={[styles.miniCategoryIndicator, { backgroundColor: themeColor }]} />
+                        <View style={styles.miniCardTextContent}>
+                          <Text style={[styles.miniEventTitle, { color: colors.textPrimary }]} numberOfLines={1}>{event.title}</Text>
+                          <View style={styles.miniLocationRow}>
+                            <Ionicons name="calendar-sharp" size={12} color="#10b981" />
+                            <Text style={[styles.miniLocationText, { color: '#10b981', fontWeight: '700' }]} numberOfLines={1}>Pass Confirmed</Text>
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </ScrollView>
+              )}
+            </View>
+
+            {/* HOSTED EVENTS */}
             <View style={styles.sectionSectionWrapper}>
               <View style={styles.sectionHeaderRow}>
                 <Text style={[styles.sectionHeadingText, { color: colors.textPrimary }]}>Your Events</Text>
-                <Text style={[styles.viewAllTextLink, { color: colors.textMuted }]}>Tap for Engagement Insights</Text>
+                <Text style={[styles.viewAllTextLink, { color: colors.textMuted }]}>Engagement Insights</Text>
               </View>
 
               {hostedEvents.length === 0 ? (
@@ -307,11 +325,10 @@ export default function ProfileScreen() {
               )}
             </View>
 
-            {/* HORIZONTAL LIKED EVENTS LIST */}
+            {/* LIKED EVENTS */}
             <View style={styles.sectionSectionWrapper}>
               <View style={styles.sectionHeaderRow}>
                 <Text style={[styles.sectionHeadingText, { color: colors.textPrimary }]}>Liked Events</Text>
-                {likedEvents.length > 0 && <TouchableOpacity><Text style={[styles.viewAllTextLink, { color: colors.textMuted }]}>See All</Text></TouchableOpacity>}
               </View>
 
               {likedEvents.length === 0 ? (
@@ -340,7 +357,6 @@ export default function ProfileScreen() {
           </>
         )}
 
-        {/* DEDICATED LOG OUT BUTTON ON PAGE */}
         <TouchableOpacity 
           style={[styles.mainLogoutButton, { borderColor: colors.cardBorder, backgroundColor: isDark ? '#18181b' : '#fafafa' }]} 
           activeOpacity={0.7} 
@@ -352,7 +368,7 @@ export default function ProfileScreen() {
 
       </ScrollView>
 
-      {/* INTERACTION ANALYTICS SHEET MODAL */}
+      {/* ANALYTICS INSIGHTS MODAL */}
       <Modal visible={!!selectedOwnEvent} transparent={true} animationType="fade" onRequestClose={() => setSelectedOwnEvent(null)}>
         <TouchableOpacity style={styles.bottomSheetBackdrop} activeOpacity={1} onPress={() => setSelectedOwnEvent(null)}>
           <View style={[styles.analyticsSheetContainer, { backgroundColor: colors.cardBg }]}>
@@ -374,12 +390,6 @@ export default function ProfileScreen() {
                     <Text style={[styles.analyticValue, { color: colors.textPrimary }]}>{selectedOwnEvent.metrics?.saves || 0}</Text>
                     <Text style={[styles.analyticLabel, { color: colors.textSecondary }]}>Interested / Saved</Text>
                   </View>
-                  
-                  <View style={[styles.analyticCard, { borderColor: '#ef4444', backgroundColor: isDark ? '#27272a' : '#fafafa' }]}>
-                    <Ionicons name="close-circle-outline" size={22} color="#ef4444" />
-                    <Text style={[styles.analyticValue, { color: colors.textPrimary }]}>{selectedOwnEvent.metrics?.removes || 0}</Text>
-                    <Text style={[styles.analyticLabel, { color: colors.textSecondary }]}>Removed / Hidden</Text>
-                  </View>
                 </View>
 
                 <TouchableOpacity style={[styles.closeSheetButton, { backgroundColor: colors.textPrimary }]} onPress={() => setSelectedOwnEvent(null)}>
@@ -391,7 +401,7 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </Modal>
 
-      {/* HAMBURGER SIDE MODAL PANEL */}
+      {/* HAMBURGER MODAL PANEL */}
       <Modal visible={menuVisible} transparent={true} animationType="fade" onRequestClose={() => setMenuVisible(false)}>
         <TouchableOpacity style={styles.menuOverlayBackground} activeOpacity={1} onPress={() => setMenuVisible(false)}>
           <View style={[styles.hamburgerSidePanel, { backgroundColor: colors.cardBg }]}>
@@ -402,7 +412,7 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
             <View style={[styles.panelDivider, { backgroundColor: colors.cardBorder }]} />
-            <TouchableOpacity style={styles.panelRowLink} onPress={() => { setMenuVisible(false); Alert.alert('Settings', 'Account interface router.'); }}>
+            <TouchableOpacity style={styles.panelRowLink} onPress={() => { setMenuVisible(false); Alert.alert('Settings', 'Account interface management node layout.'); }}>
               <Ionicons name="settings-outline" size={20} color={colors.textSecondary} />
               <Text style={[styles.panelLinkText, { color: colors.textSecondary }]}>Account Settings</Text>
             </TouchableOpacity>
@@ -412,12 +422,11 @@ export default function ProfileScreen() {
               <Ionicons name="log-out-outline" size={20} color="#ef4444" />
               <Text style={styles.logoutLinkText}>Log Out</Text>
             </TouchableOpacity>
-            
           </View>
         </TouchableOpacity>
       </Modal>
 
-      {/* HOST AN EVENT MODAL */}
+      {/* HOST MODAL WINDOW */}
       <Modal visible={organizeModalVisible} animationType="slide" transparent={true} onRequestClose={() => setOrganizeModalVisible(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalKeyboardAvoidingContainer}>
           <View style={[styles.organizeModalWindow, { backgroundColor: colors.cardBg }]}>
@@ -450,7 +459,7 @@ export default function ProfileScreen() {
               </View>
 
               <Text style={[styles.inputLabelText, { color: colors.textMuted }]}>PINPOINT EVENT LOCATION</Text>
-              <Text style={styles.inputSubhintText}>Drag and scroll map to align the focal marker at the venue point</Text>
+              <Text style={styles.inputSubhintText}>Drag map to center focusing pin vector</Text>
               
               <View style={[styles.mapContainerFrame, { borderColor: colors.cardBorder }]}>
                 <MapView 
@@ -467,7 +476,7 @@ export default function ProfileScreen() {
               </View>
 
               <Text style={[styles.inputLabelText, { color: colors.textMuted }]}>WRITTEN VENUE ADDRESS</Text>
-              <TextInput style={[styles.formInputBox, inputThemeStyle]} placeholder="e.g., Room 302, Phase 2, IT Hub Buildings" placeholderTextColor={colors.textMuted} value={address} onChangeText={setAddress} />
+              <TextInput style={[styles.formInputBox, inputThemeStyle]} placeholder="e.g., Phase II Tech Enclave" placeholderTextColor={colors.textMuted} value={address} onChangeText={setAddress} />
 
               <Text style={[styles.inputLabelText, { color: colors.textMuted }]}>CONTACT EMAIL</Text>
               <TextInput style={[styles.formInputBox, inputThemeStyle]} placeholder="contact@host.com" placeholderTextColor={colors.textMuted} keyboardType="email-address" value={eventEmail} onChangeText={setEventEmail} autoCapitalize="none" />
@@ -500,7 +509,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   headerTitleContainer: { flex: 1, justifyContent: 'center' },
-  headerSub: { fontSize: 11, fontWeight: '900', color: '#eab308', letterSpacing: 2, textTransform: 'uppercase' },
   headerTitle: { fontSize: 28, fontWeight: '900', letterSpacing: -0.5, marginTop: 1 },
   hamburgerButton: { padding: 6, alignSelf: 'center' },
 
@@ -691,4 +699,4 @@ const styles = StyleSheet.create({
     marginTop: 28,
   },
   submitFormButtonText: { fontSize: 14, fontWeight: '700' },
-}); // 🔧 Fixed stylesheet ending layout
+});

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, Image, Dimensions, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, Image, Dimensions, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
@@ -41,6 +41,9 @@ export default function DiscoverScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   
+  // --- NEW: Track RSVPs explicitly ---
+  const [rsvpedEvents, setRsvpedEvents] = useState<string[]>([]);
+  
   // Popup Detail Modal State
   const [selectedEvent, setSelectedEvent] = useState<DatabaseEvent | null>(null);
 
@@ -65,44 +68,91 @@ export default function DiscoverScreen() {
       }
     };
 
+    // --- NEW: Fetch user's registered events on load ---
+    const fetchUserRegistrations = async () => {
+      try {
+        const token = await getToken();
+        const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
+        const response = await fetch(`${BASE_URL}/api/events/rsvp`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setRsvpedEvents(data.map((ev: DatabaseEvent) => ev.id));
+        }
+      } catch (err) {
+        console.error("Error fetching registrations:", err);
+      }
+    };
+
     fetchEvents();
+    fetchUserRegistrations();
   }, []);
 
-  // --- NEW: API call to register the interaction in Supabase ---
-  const recordInteraction = async (eventId: string, interactionType: 'like' | 'rejected') => {
-  try {
-    const token = await getToken();
-    const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
-    
-    const response = await fetch(`${BASE_URL}/api/interactions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify({ eventId, interactionType })
-    });
-    
-    // Parse the response from the backend
-    const data = await response.json();
-
-    // Check if the backend actually returned a success status
-    if (!response.ok) {
-      console.error('❌ Backend rejected the interaction:', data);
-      return; // Stop here, don't print the success log
+  // --- NEW: Handle Event Registration ---
+  const handleRegisterEvent = async (id: string) => {
+    if (rsvpedEvents.includes(id)) {
+      Alert.alert("Notice", "You are already registered for this event.");
+      return;
     }
-    
-    console.log(`✅ Interaction verified and saved in DB: ${interactionType} for event ${eventId}`);
-  } catch (error) {
-    console.error('🚨 Network or fetch failure:', error);
-  }
-};
 
-  // --- UPDATED: Hooked up swipe handler to our interaction logic ---
+    // Optimistically update the UI so button changes instantly
+    setRsvpedEvents(prev => [...prev, id]);
+
+    try {
+      const token = await getToken();
+      const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
+      const response = await fetch(`${BASE_URL}/api/rsvp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ eventId: id })
+      });
+
+      if (!response.ok) throw new Error('Registration failed.');
+      Alert.alert("Success! 🎉", "Your ticket has been confirmed!");
+    } catch (err) {
+      console.error("RSVP Action Crash:", err);
+      // Revert if network fails
+      setRsvpedEvents(prev => prev.filter(item => item !== id));
+      Alert.alert("Action Failed", "Could not process your registration. Try again later.");
+    }
+  };
+
+  // --- API call to register the interaction in Supabase ---
+  const recordInteraction = async (eventId: string, interactionType: 'like' | 'rejected') => {
+    try {
+      const token = await getToken();
+      const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
+      
+      const response = await fetch(`${BASE_URL}/api/interactions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ eventId, interactionType })
+      });
+      
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error('❌ Backend rejected the interaction:', data);
+        return; 
+      }
+      
+      console.log(`✅ Interaction verified and saved in DB: ${interactionType} for event ${eventId}`);
+    } catch (error) {
+      console.error('🚨 Network or fetch failure:', error);
+    }
+  };
+
+  // --- Hooked up swipe handler to our interaction logic ---
   const handleSwipeComplete = (direction: 'left' | 'right') => {
     const currentSwipedEvent = events[currentIndex];
     
-    // Register the interaction in the background before moving on
     if (currentSwipedEvent) {
       const type = direction === 'right' ? 'like' : 'rejected';
       recordInteraction(currentSwipedEvent.id, type);
@@ -311,6 +361,9 @@ export default function DiscoverScreen() {
         const sharedCardStyle = { backgroundColor: colors.cardBg, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' };
         const imageUrl = selectedEvent.image_url || 'https://via.placeholder.com/400x300?text=No+Image';
 
+        // --- NEW: Calculate if user is registered ---
+        const isRegistered = rsvpedEvents.includes(selectedEvent.id);
+
         return (
           <View style={styles.modalBlurOverlay}>
             <View style={[styles.centerHeroCard, sharedCardStyle]}>
@@ -382,14 +435,25 @@ export default function DiscoverScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {/* 🟩 REGISTER FULL WIDTH BUTTON */}
+                {/* 🟩 REGISTER FULL WIDTH BUTTON -- UPDATED TO WORK -- */}
                 <TouchableOpacity
-                  style={[styles.registerButton, isDark && { backgroundColor: '#064e3b', borderColor: '#047857' }]}
+                  style={[
+                    styles.registerButton, 
+                    isDark && { backgroundColor: '#064e3b', borderColor: '#047857' },
+                    isRegistered && { backgroundColor: '#047857', opacity: 0.75, borderColor: '#064e3b' }
+                  ]}
                   activeOpacity={0.8}
-                  onPress={() => alert('Dummy Registration Triggered')}
+                  disabled={isRegistered}
+                  onPress={() => handleRegisterEvent(selectedEvent.id)}
                 >
-                  <Ionicons name="ticket-outline" size={20} color="#ffffff" />
-                  <Text style={styles.registerButtonText}>Register Now</Text>
+                  <Ionicons 
+                    name={isRegistered ? "checkmark-done-circle" : "ticket-outline"} 
+                    size={20} 
+                    color="#ffffff" 
+                  />
+                  <Text style={styles.registerButtonText}>
+                    {isRegistered ? "Registered" : "Register Now"}
+                  </Text>
                 </TouchableOpacity>
 
               </View>

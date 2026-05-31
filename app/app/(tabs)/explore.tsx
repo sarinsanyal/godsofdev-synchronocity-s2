@@ -5,11 +5,11 @@ import * as Location from 'expo-location';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import { useAppTheme } from '../_layout';
+import { useAuth } from '@clerk/expo'; // 👈 Added for authentic Clerk token management
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL; 
-const MOCK_USER_ID = 'user-123'; 
 
 interface DatabaseEvent {
   id: string;
@@ -32,6 +32,7 @@ interface DatabaseEvent {
 export default function ExploreScreen() {
   const { theme, colors } = useAppTheme();
   const isDark = theme === 'dark';
+  const { getToken } = useAuth(); // 👈 Hook to fetch your current user's valid session JWT token
 
   const mapRef = useRef<MapView | null>(null);
   const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
@@ -42,9 +43,10 @@ export default function ExploreScreen() {
   const [isSearchFocused, setIsSearchFocused] = useState<boolean>(false);
   const [selectedEvent, setSelectedEvent] = useState<DatabaseEvent | null>(null);
 
-  // Interaction States
+  // Interaction States synced with your database schemas
   const [likedEvents, setLikedEvents] = useState<string[]>([]);
   const [dislikedEvents, setDislikedEvents] = useState<string[]>([]);
+  const [rsvpedEvents, setRsvpedEvents] = useState<string[]>([]); // 👈 Array to track explicit RSVPs locally
 
   const STREET_LAT_DELTA = 0.06;
   const STREET_LNG_DELTA = 0.06;
@@ -163,36 +165,90 @@ export default function ExploreScreen() {
     }
   };
 
+  // 👈 Updates /interactions endpoint with safe optimistic rollbacks
   const toggleLikeEvent = async (id: string) => {
     const isAlreadyLiked = likedEvents.includes(id);
+    
     setLikedEvents(prev => 
       prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
     );
+    setDislikedEvents(prev => prev.filter(item => item !== id));
 
-    if (!isAlreadyLiked) {
-      try {
-        const response = await fetch(`${BASE_URL}/api/rsvp`, { 
-          method: 'POST', 
-          headers: {
-            'Content-Type': 'application/json', 
-            'x-mock-user-id': MOCK_USER_ID 
-          },
-          body: JSON.stringify({ eventId: id }) 
-        });
-        if (!response.ok) throw new Error('RSVP request failed');
-      } catch (err) {
-        console.error("Network RSVP error:", err);
-      }
+    try {
+      const token = await getToken();
+      const response = await fetch(`${BASE_URL}/api/interactions`, { 
+        method: 'POST', 
+        headers: {
+          'Content-Type': 'application/json', 
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ 
+          eventId: id,
+          interactionType: isAlreadyLiked ? 'reject' : 'like' // Inverting state securely
+        }) 
+      });
+      if (!response.ok) throw new Error('Interaction update rejected by server.');
+    } catch (err) {
+      console.error("Network Like error:", err);
+      // Rollback UI to previous state on network crash
+      setLikedEvents(prev => isAlreadyLiked ? [...prev, id] : prev.filter(item => item !== id));
+      Alert.alert("Connection Failure", "Could not sync interaction profile data.");
     }
   };
 
-  const toggleDislikeEvent = (id: string) => {
-    if (!dislikedEvents.includes(id)) {
-      setDislikedEvents(prev => [...prev, id]);
-      setLikedEvents(prev => prev.filter(item => item !== id));
-      setSelectedEvent(null);
-    } else {
+  // 👈 Connects directly to /interactions with 'reject' payload
+  const toggleDislikeEvent = async (id: string) => {
+    setDislikedEvents(prev => [...prev, id]);
+    setLikedEvents(prev => prev.filter(item => item !== id));
+    setSelectedEvent(null);
+
+    try {
+      const token = await getToken();
+      const response = await fetch(`${BASE_URL}/api/interactions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          eventId: id,
+          interactionType: 'reject'
+        })
+      });
+      if (!response.ok) throw new Error();
+    } catch (err) {
+      console.error("Network Dislike error:", err);
       setDislikedEvents(prev => prev.filter(item => item !== id));
+    }
+  };
+
+  // 👈 Explicit handle wrapper for the main "Register Now" /api/rsvp endpoint
+  const handleRegisterEvent = async (id: string) => {
+    if (rsvpedEvents.includes(id)) {
+      Alert.alert("Notice", "You are already officially on the attendance record for this event.");
+      return;
+    }
+
+    setRsvpedEvents(prev => [...prev, id]);
+
+    try {
+      const token = await getToken();
+      const response = await fetch(`${BASE_URL}/api/rsvp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ eventId: id })
+      });
+
+      if (!response.ok) throw new Error('RSVP processing failed');
+
+      Alert.alert("Success! 🎉", "Your registration has been submitted and confirmed successfully.");
+    } catch (err) {
+      console.error("Registration error:", err);
+      setRsvpedEvents(prev => prev.filter(item => item !== id));
+      Alert.alert("Action Failed", "Could not process your registration ticket. Try again later.");
     }
   };
 
@@ -268,7 +324,7 @@ export default function ExploreScreen() {
         })}
       </MapView>
 
-      {/* 🔍 SEARCH CONTAINER */}
+      {/* SEARCH CONTAINER */}
       <View style={styles.searchContainer}>
         <View style={[styles.searchBarWrapper, sharedCardStyle]}>
           <Ionicons name="search" size={20} color={colors.textMuted} style={styles.searchIcon} />
@@ -290,7 +346,7 @@ export default function ExploreScreen() {
           )}
         </View>
 
-        {/* 📋 DROPDOWN RESULTS PANELS */}
+        {/* DROPDOWN RESULTS PANELS */}
         {isSearchFocused && searchQuery.trim().length > 0 && (
           <View style={[styles.dropdownPanel, sharedCardStyle]}>
             {discoverableEvents.length === 0 ? (
@@ -327,7 +383,7 @@ export default function ExploreScreen() {
         )}
       </View>
 
-      {/* 🎯 TARGET TRACKING FLOATER */}
+      {/* TARGET TRACKING FLOATER */}
       <TouchableOpacity 
         style={[
           styles.locationButton, 
@@ -344,10 +400,11 @@ export default function ExploreScreen() {
         )}
       </TouchableOpacity>
 
-      {/* 📋 DETAILED MODAL HERO CARD */}
+      {/* DETAILED MODAL HERO CARD */}
       {selectedEvent && (() => {
         const catTheme = getCategoryTheme(selectedEvent.category);
         const isLiked = likedEvents.includes(selectedEvent.id);
+        const isRegistered = rsvpedEvents.includes(selectedEvent.id); // Read live registration tracker status
 
         return (
           <View style={styles.modalBlurOverlay}>
@@ -365,7 +422,7 @@ export default function ExploreScreen() {
               <View style={styles.heroCardContent}>
                 <View style={[styles.tagContainer, { backgroundColor: catTheme.bg, borderColor: catTheme.color }]}>
                   <Text style={[styles.categoryBadgeText, { color: catTheme.text }]}>
-                    ⚡ {selectedEvent.category?.toUpperCase() || 'EVENT'}
+                    ★ {selectedEvent.category?.toUpperCase() || 'EVENT'}
                   </Text>
                 </View>
 
@@ -414,19 +471,30 @@ export default function ExploreScreen() {
                       color={isLiked ? "#ffffff" : "#22c55e"} 
                     />
                     <Text style={[styles.actionButtonText, { color: isLiked ? '#ffffff' : '#22c55e' }]}>
-                      {isLiked ? "RSVP'd" : 'Like'}
+                      {isLiked ? 'Liked' : 'Like'}
                     </Text>
                   </TouchableOpacity>
                 </View>
 
-                {/* 🟩 NEW REGISTER FULL WIDTH BUTTON (Matches DiscoverScreen spec) */}
+                {/* CONNECTED REGISTER FULL WIDTH BUTTON */}
                 <TouchableOpacity
-                  style={[styles.registerButton, isDark && { backgroundColor: '#064e3b', borderColor: '#047857' }]}
+                  style={[
+                    styles.registerButton, 
+                    isDark && { backgroundColor: '#064e3b', borderColor: '#047857' },
+                    isRegistered && { backgroundColor: '#047857', opacity: 0.75, borderColor: '#064e3b' }
+                  ]}
                   activeOpacity={0.8}
-                  onPress={() => alert('Dummy Registration Triggered')}
+                  disabled={isRegistered} // Lock button if process was already completed
+                  onPress={() => handleRegisterEvent(selectedEvent.id)}
                 >
-                  <Ionicons name="ticket-outline" size={20} color="#ffffff" />
-                  <Text style={styles.registerButtonText}>Register Now</Text>
+                  <Ionicons 
+                    name={isRegistered ? "checkmark-done-circle" : "ticket-outline"} 
+                    size={20} 
+                    color="#ffffff" 
+                  />
+                  <Text style={styles.registerButtonText}>
+                    {isRegistered ? "Registered" : "Register Now"}
+                  </Text>
                 </TouchableOpacity>
 
               </View>
@@ -634,7 +702,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
-  /* 🟩 REGISTER BUTTON STYLES */
   registerButton: {
     width: '100%',
     height: 48,

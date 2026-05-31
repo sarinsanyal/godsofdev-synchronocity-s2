@@ -290,6 +290,23 @@ router.post('/rsvp', async (req: ClerkRequest, res: Response) => {
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
     if (!eventId) return res.status(400).json({ error: 'Event ID required' });
 
+    // --- 🚨 FIX: Ensure User Exists in Supabase users table first ---
+    // This prevents the Foreign Key (23503) crash if the user hasn't hit /auth/sync yet!
+    const { error: userSyncError } = await supabase
+      .from('users')
+      .upsert([{ 
+        clerk_user_id: userId,
+        name: 'New User', // Fallback defaults
+        user_type: 'normal',
+        interests: []
+      }], { onConflict: 'clerk_user_id' });
+
+    if (userSyncError) {
+      console.error("Warning: Failed to auto-sync user during RSVP:", userSyncError);
+    }
+    // ----------------------------------------------------------------
+
+    // Now this insert will pass because the clerk_user_id exists in "users"
     const { error: rsvpError } = await supabase
       .from('rsvps')
       .insert([{ clerk_user_id: userId, event_id: eventId }]);
@@ -311,6 +328,40 @@ router.post('/rsvp', async (req: ClerkRequest, res: Response) => {
   } catch (error) {
     console.error('RSVP Error:', error);
     res.status(500).json({ error: 'Failed to process RSVP' });
+  }
+});
+
+// ==========================================
+// 4.5 GET RSVP'D EVENTS (My Registrations)
+// ==========================================
+router.get('/events/rsvp', async (req: ClerkRequest, res: Response) => {
+  try {
+    const userId = req.auth?.userId;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized: No token' });
+
+    // Relational join tracking user RSVPs
+    const { data: rsvpData, error } = await supabase
+      .from('rsvps')
+      .select(`
+        event_id,
+        events (*) 
+      `)
+      .eq('clerk_user_id', userId);
+
+    if (error) {
+      console.error('Supabase RSVP Join Error:', error);
+      return res.status(500).json({ error: 'Database fetch failed', details: error.message });
+    }
+
+    // Flatten nested objects and filter empty cleanups
+    const extractedRsvpedEvents = (rsvpData || [])
+      .map(item => item.events)
+      .filter(Boolean);
+
+    res.status(200).json(extractedRsvpedEvents);
+  } catch (error: any) {
+    console.error('Fetch RSVP Events Server Error:', error);
+    res.status(500).json({ error: 'Failed to fetch registered events' });
   }
 });
 
