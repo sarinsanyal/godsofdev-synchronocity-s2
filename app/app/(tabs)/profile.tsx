@@ -33,6 +33,7 @@ export default function ProfileScreen() {
   const [menuVisible, setMenuVisible] = useState(false);
   const [organizeModalVisible, setOrganizeModalVisible] = useState(false);
   const [selectedOwnEvent, setSelectedOwnEvent] = useState<any | null>(null);
+  const [selectedEventDetail, setSelectedEventDetail] = useState<any | null>(null); // NEW: For the detailed generic popup
   
   // --- DATA FETCHING STATE ---
   const [hostedEvents, setHostedEvents] = useState<any[]>([]);
@@ -232,6 +233,17 @@ export default function ProfileScreen() {
     }
   };
 
+  const getCategoryTheme = (category?: string) => {
+    switch (category?.toLowerCase()) {
+      case 'gaming': return { color: '#8b5cf6', bg: isDark ? '#2e1065' : '#f5f3ff', text: isDark ? '#ddd6fe' : '#5b21b6' };
+      case 'food': return { color: '#ef4444', bg: isDark ? '#7c2d12' : '#fff7ed', text: isDark ? '#ffedd5' : '#9a3412' }; 
+      case 'tech': return { color: '#06b6d4', bg: isDark ? '#164e63' : '#ecfeff', text: isDark ? '#cffafe' : '#083344' };
+      case 'art': return { color: '#ec4899', bg: isDark ? '#831843' : '#fdf2f8', text: isDark ? '#fce7f3' : '#9d174d' };
+      case 'wellness': return { color: '#10b981', bg: isDark ? '#064e3b' : '#ecfdf5', text: isDark ? '#d1fae5' : '#065f46' };
+      default: return { color: '#3b82f6', bg: isDark ? '#1e3a8a' : '#eff6ff', text: isDark ? '#dbeafe' : '#1e40af' };
+    }
+  };
+
   const dynamicCardStyle = { backgroundColor: colors.cardBg, borderColor: colors.cardBorder };
   const inputThemeStyle = { backgroundColor: isDark ? '#18181b' : '#fafafa', borderColor: colors.cardBorder, color: colors.textPrimary };
 
@@ -329,7 +341,12 @@ export default function ProfileScreen() {
                   {rsvpedEvents.map((event) => {
                     const themeColor = getCategoryColor(event.category);
                     return (
-                      <View key={`rsvp-${event.id}`} style={[styles.eventMiniCard, dynamicCardStyle]}>
+                      <TouchableOpacity 
+                        key={`rsvp-${event.id}`} 
+                        style={[styles.eventMiniCard, dynamicCardStyle]}
+                        activeOpacity={0.85}
+                        onPress={() => setSelectedEventDetail(event)}
+                      >
                         <Image source={{ uri: event.image_url || USER_PROFILE.fallback_image }} style={styles.eventMiniCardImage} />
                         <View style={[styles.miniCategoryIndicator, { backgroundColor: themeColor }]} />
                         <View style={styles.miniCardTextContent}>
@@ -339,7 +356,7 @@ export default function ProfileScreen() {
                             <Text style={[styles.miniLocationText, { color: '#10b981', fontWeight: '700' }]} numberOfLines={1}>Pass Confirmed</Text>
                           </View>
                         </View>
-                      </View>
+                      </TouchableOpacity>
                     );
                   })}
                 </ScrollView>
@@ -364,7 +381,7 @@ export default function ProfileScreen() {
                         key={event.id} 
                         style={[styles.eventMiniCard, dynamicCardStyle]}
                         activeOpacity={0.85}
-                        onPress={() => setSelectedOwnEvent(event)}
+                        onPress={() => setSelectedEventDetail(event)}
                       >
                         <Image source={{ uri: event.image_url || USER_PROFILE.fallback_image }} style={styles.eventMiniCardImage} />
                         <View style={[styles.miniCategoryIndicator, { backgroundColor: themeColor }]} />
@@ -395,7 +412,12 @@ export default function ProfileScreen() {
                   {likedEvents.map((event) => {
                     const themeColor = getCategoryColor(event.category);
                     return (
-                      <View key={event.id} style={[styles.eventMiniCard, dynamicCardStyle]}>
+                      <TouchableOpacity 
+                        key={event.id} 
+                        style={[styles.eventMiniCard, dynamicCardStyle]}
+                        activeOpacity={0.85}
+                        onPress={() => setSelectedEventDetail(event)}
+                      >
                         <Image source={{ uri: event.image_url || USER_PROFILE.fallback_image }} style={styles.eventMiniCardImage} />
                         <View style={[styles.miniCategoryIndicator, { backgroundColor: themeColor }]} />
                         <View style={styles.miniCardTextContent}>
@@ -405,7 +427,7 @@ export default function ProfileScreen() {
                             <Text style={[styles.miniLocationText, { color: colors.textMuted }]} numberOfLines={1}>{event.address}</Text>
                           </View>
                         </View>
-                      </View>
+                      </TouchableOpacity>
                     );
                   })}
                 </ScrollView>
@@ -425,7 +447,106 @@ export default function ProfileScreen() {
 
       </ScrollView>
 
-      {/* ANALYTICS INSIGHTS MODAL */}
+      {/* 📋 DETAILED GENERIC EVENT MODAL */}
+      {selectedEventDetail && (() => {
+        const catTheme = getCategoryTheme(selectedEventDetail.category);
+        const sharedCardStyle = { backgroundColor: colors.cardBg, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' };
+        const imageUrl = selectedEventDetail.image_url || USER_PROFILE.fallback_image;
+
+        const isRegistered = rsvpedEvents.some(e => e.id === selectedEventDetail.id);
+        const isHosted = hostedEvents.some(e => e.id === selectedEventDetail.id);
+
+        return (
+          <Modal visible={true} transparent={true} animationType="fade" onRequestClose={() => setSelectedEventDetail(null)}>
+            <View style={styles.modalBlurOverlay}>
+              <View style={[styles.centerHeroCard, sharedCardStyle]}>
+                <Image source={{ uri: imageUrl }} style={styles.heroCardImage} />
+
+                <TouchableOpacity 
+                  style={styles.closeCardButton} 
+                  onPress={() => setSelectedEventDetail(null)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="close-circle" size={34} color="#ffffff" />
+                </TouchableOpacity>
+
+                <ScrollView 
+                  style={{ flexShrink: 1 }}
+                  contentContainerStyle={styles.heroCardContent}
+                  showsVerticalScrollIndicator={false}
+                >
+                  <View style={[styles.tagContainer, { backgroundColor: catTheme.bg, borderColor: catTheme.color }]}>
+                    <Text style={[styles.categoryBadgeText, { color: catTheme.text }]}>
+                      ⚡ {selectedEventDetail.category?.toUpperCase() || 'EVENT'}
+                    </Text>
+                  </View>
+
+                  <Text style={[styles.heroCardTitle, { color: colors.textPrimary }]}>{selectedEventDetail.title}</Text>
+                  <Text style={styles.heroCardSummary}>{selectedEventDetail.summary || 'Live Session'}</Text>
+                  <Text style={[styles.heroCardDesc, { color: colors.textSecondary }]}>
+                    {selectedEventDetail.description || 'No detailed layout description provided for this session.'}
+                  </Text>
+
+                  <View style={[styles.dividerLine, { backgroundColor: colors.cardBorder }]} />
+
+                  <View style={styles.metaRowPopup}>
+                    <Ionicons name="location" size={16} color={catTheme.color} />
+                    <Text style={[styles.metaTextPopup, { color: colors.textSecondary }]} numberOfLines={2}>
+                      {selectedEventDetail.address || 'Location Details TBA'}
+                    </Text>
+                  </View>
+
+                  {selectedEventDetail.contact_email && (
+                    <View style={[styles.metaRowPopup, { marginTop: 8, marginBottom: 4 }]}>
+                      <Ionicons name="mail" size={16} color={colors.textMuted} />
+                      <Text style={[styles.metaTextPopup, { color: colors.textSecondary }]} numberOfLines={1}>
+                        {selectedEventDetail.contact_email}
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* DYNAMIC ACTION BUTTON BASED ON EVENT STATUS */}
+                  {isHosted ? (
+                    <TouchableOpacity
+                      style={[styles.registerButton, { backgroundColor: '#3b82f6', borderColor: '#2563eb' }]}
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        setSelectedOwnEvent(selectedEventDetail);
+                        setSelectedEventDetail(null); // Close main, open analytics
+                      }}
+                    >
+                      <Ionicons name="analytics" size={20} color="#ffffff" />
+                      <Text style={styles.registerButtonText}>View Insights</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      style={[
+                        styles.registerButton, 
+                        isDark && { backgroundColor: '#064e3b', borderColor: '#047857' },
+                        { backgroundColor: '#047857', opacity: 0.75, borderColor: '#064e3b' }
+                      ]}
+                      activeOpacity={1}
+                      disabled={true}
+                    >
+                      <Ionicons 
+                        name={isRegistered ? "checkmark-done-circle" : "heart"} 
+                        size={20} 
+                        color="#ffffff" 
+                      />
+                      <Text style={styles.registerButtonText}>
+                        {isRegistered ? "Registered" : "Saved to Liked"}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+
+                </ScrollView>
+              </View>
+            </View>
+          </Modal>
+        );
+      })()}
+
+      {/* ANALYTICS INSIGHTS MODAL (For Hosted Events) */}
       <Modal visible={!!selectedOwnEvent} transparent={true} animationType="fade" onRequestClose={() => setSelectedOwnEvent(null)}>
         <TouchableOpacity style={styles.bottomSheetBackdrop} activeOpacity={1} onPress={() => setSelectedOwnEvent(null)}>
           <View style={[styles.analyticsSheetContainer, { backgroundColor: colors.cardBg }]}>
@@ -802,4 +923,21 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   submitFormButtonText: { fontSize: 15, fontWeight: '800' },
+
+  // NEW STYLES FROM DISCOVER SCREEN FOR THE DETAILED POPUP
+  modalBlurOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(9, 9, 11, 0.5)', justifyContent: 'center', alignItems: 'center', zIndex: 2000 },
+  centerHeroCard: { width: SCREEN_WIDTH * 0.9, maxHeight: SCREEN_HEIGHT * 0.85, borderRadius: 36, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 24 }, shadowOpacity: 0.25, shadowRadius: 40, elevation: 20, borderWidth: 1 },
+  heroCardImage: { width: '100%', height: SCREEN_HEIGHT * 0.24, backgroundColor: '#e4e4e7' },
+  closeCardButton: { position: 'absolute', top: 20, right: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 8, zIndex: 10 },
+  heroCardContent: { padding: 28 },
+  tagContainer: { borderWidth: 1, alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, marginBottom: 12 },
+  categoryBadgeText: { fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
+  heroCardTitle: { fontSize: 24, fontWeight: '900', lineHeight: 30, letterSpacing: -0.5 },
+  heroCardSummary: { fontSize: 15, color: '#eab308', fontWeight: '800', marginTop: 6 },
+  heroCardDesc: { fontSize: 14, marginTop: 10, lineHeight: 22, opacity: 0.9 },
+  dividerLine: { height: 1, marginTop: 16, marginBottom: 16, opacity: 0.6 },
+  metaRowPopup: { flexDirection: 'row', alignItems: 'center' },
+  metaTextPopup: { fontSize: 13, marginLeft: 10, fontWeight: '600', flex: 1 },
+  registerButton: { width: '100%', height: 52, borderRadius: 16, backgroundColor: '#10b981', borderWidth: 1.5, borderColor: '#059669', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 16, gap: 10, shadowColor: '#10b981', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 4 },
+  registerButtonText: { color: '#ffffff', fontSize: 16, fontWeight: '800', letterSpacing: 0.5 },
 });
